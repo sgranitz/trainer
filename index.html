@@ -145,6 +145,18 @@ body {
   border-radius: 8px;
   padding: 14px 16px;
 }
+.auth-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+.auth-option {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
 .field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -251,14 +263,15 @@ body {
 .toast.error { border-color: rgba(200,112,96,0.45); }
 @media (max-width: 960px) {
   .overview, .layout { grid-template-columns: 1fr; }
-  .stats, .field-grid { grid-template-columns: 1fr 1fr; }
+  .stats, .field-grid, .auth-options { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 560px) {
   body { padding: 16px 12px 40px; }
   .wordmark { font-size: 32px; }
-  .stats, .field-grid { grid-template-columns: 1fr; }
+  .stats, .field-grid, .auth-options { grid-template-columns: 1fr; }
 }
 </style>
+<script src="https://accounts.google.com/gsi/client"></script>
 </head>
 <body>
 <header class="header">
@@ -266,12 +279,15 @@ body {
     <a class="back-link" href="https://www.stoult.com/workshop/">&lt; back to workshop</a>
     <div class="wordmark">the <em>trainer</em></div>
   </div>
-  <div class="status">
-    <div class="dot"></div>
-    <div class="status-copy">
-      <div class="eyebrow">local vault</div>
-      <strong id="vaultName">not connected</strong>
+  <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;">
+    <div class="status">
+      <div class="dot"></div>
+      <div class="status-copy">
+        <div class="eyebrow" id="statusMode">private vault</div>
+        <strong id="vaultName">not connected</strong>
+      </div>
     </div>
+    <button class="btn btn-secondary" id="signOutBtn" style="display:none;">sign out</button>
   </div>
 </header>
 
@@ -287,17 +303,43 @@ body {
   <div class="stats" id="stats"></div>
 </section>
 
+<div id="authGate" class="section" style="display:none; max-width:660px;">
+  <div class="eyebrow">connect vault</div>
+  <div class="copy">The Trainer uses the same vault setup as the other apps: choose a local folder on this device, or connect to the same vault in Google Drive.</div>
+
+  <div id="setupOptions" class="auth-options">
+    <div class="auth-option">
+      <div class="eyebrow">this device only</div>
+      <div class="history-title" style="margin-top:10px;">Local folder</div>
+      <div class="copy" style="margin:10px 0 14px;">Point directly to your vault folder on this computer. Fast, no account needed - desktop only.</div>
+      <button class="btn btn-primary" id="connectBtn">pick folder</button>
+    </div>
+    <div class="auth-option" id="googleOption">
+      <div class="eyebrow">any device</div>
+      <div class="history-title" style="margin-top:10px;">Google Drive</div>
+      <div class="copy" style="margin:10px 0 14px;">Sign in with Google to access your Drive vault from desktop, mobile, or anywhere.</div>
+      <button class="btn btn-primary" id="googleBtn">sign in with google</button>
+    </div>
+  </div>
+
+  <div id="reconnectRow" style="display:none; margin-top:14px;">
+    <div class="copy">Your vault was previously connected. Reconnect to continue.</div>
+    <button class="btn btn-primary" id="reconnectBtn">reconnect vault</button>
+  </div>
+
+  <div id="vaultPathRow" style="display:none; margin-top:18px;">
+    <div class="copy">Signed in. Enter the name of your vault folder in Google Drive.</div>
+    <div class="field">
+      <label class="label" for="vaultPathInput">vault folder name</label>
+      <input class="input" id="vaultPathInput" placeholder="e.g. MyVault">
+    </div>
+    <button class="btn btn-primary" id="connectDriveBtn">connect</button>
+  </div>
+</div>
+
+<div id="appShell" style="display:none;">
 <div class="layout">
   <div>
-    <section class="section">
-      <div class="eyebrow">connect</div>
-      <div class="copy">Pick the user's vault folder. The Trainer will create <code>Profile.md</code>, <code>Workout Plan.md</code>, <code>Meal Plan.md</code>, and a <code>Days</code> folder under <code>References/Trainer</code>.</div>
-      <div class="actions">
-        <button class="btn btn-primary" id="connectBtn">pick folder</button>
-        <button class="btn btn-secondary" id="reconnectBtn">reconnect saved folder</button>
-      </div>
-    </section>
-
     <section class="section">
       <div class="eyebrow">profile builder</div>
       <div class="copy">This first pass creates a practical baseline: calories, protein, step goal, a weekly lifting split, and a meal cadence the user can edit directly in markdown.</div>
@@ -356,6 +398,7 @@ body {
     </section>
   </div>
 </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -368,11 +411,335 @@ body {
 </footer>
 
 <script>
+const STOULT = (() => {
+  'use strict';
+  const DRIVE = 'https://www.googleapis.com/drive/v3';
+  const IDB_DB = 'stoult';
+  const IDB_STORE = 'handles';
+  const IDB_KEY = 'vault';
+  const GTOKEN_KEY = 'stoult_gtoken';
+  const GTOKEN_EXP_KEY = 'stoult_gtoken_exp';
+  const GUSER_KEY = 'stoult_guser';
+  const FCACHE_KEY = 'stoult_fcache';
+  let _tokenClient = null;
+  let _token = null;
+  let _tokenExp = 0;
+  let _user = null;
+  let _tokenRefreshPromise = null;
+
+  async function initGoogle(clientId) {
+    if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) return false;
+    _tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: 'https://www.googleapis.com/auth/drive email profile openid',
+      callback: () => {}
+    });
+    const storedToken = localStorage.getItem(GTOKEN_KEY);
+    const storedExp = parseInt(localStorage.getItem(GTOKEN_EXP_KEY) || '0', 10);
+    const storedUser = localStorage.getItem(GUSER_KEY);
+    if (storedToken && storedExp > Date.now() + 60000 && storedUser) {
+      const parsedUser = JSON.parse(storedUser);
+      if (parsedUser && parsedUser.email) {
+        _token = storedToken;
+        _tokenExp = storedExp;
+        _user = parsedUser;
+        return true;
+      }
+    }
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        if (parsedUser && parsedUser.email) {
+          const ok = await new Promise(resolve => {
+            const timer = setTimeout(() => resolve(false), 4000);
+            _tokenClient.callback = resp => {
+              clearTimeout(timer);
+              if (resp.error) { resolve(false); return; }
+              _token = resp.access_token;
+              _tokenExp = Date.now() + (resp.expires_in || 3600) * 1000;
+              localStorage.setItem(GTOKEN_KEY, _token);
+              localStorage.setItem(GTOKEN_EXP_KEY, String(_tokenExp));
+              _user = parsedUser;
+              resolve(true);
+            };
+            _tokenClient.requestAccessToken({ prompt: '' });
+          });
+          if (ok) return true;
+        }
+      } catch {}
+    }
+    return false;
+  }
+
+  function signIn() {
+    return new Promise((resolve, reject) => {
+      _tokenClient.callback = async resp => {
+        if (resp.error) { reject(new Error(resp.error)); return; }
+        _token = resp.access_token;
+        _tokenExp = Date.now() + (resp.expires_in || 3600) * 1000;
+        localStorage.setItem(GTOKEN_KEY, _token);
+        localStorage.setItem(GTOKEN_EXP_KEY, String(_tokenExp));
+        try {
+          const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${_token}` } });
+          _user = r.ok ? await r.json() : { name: 'Google User' };
+        } catch {
+          _user = { name: 'Google User' };
+        }
+        localStorage.setItem(GUSER_KEY, JSON.stringify(_user));
+        resolve(_user);
+      };
+      _tokenClient.requestAccessToken();
+    });
+  }
+
+  function signOut() {
+    if (_token) { try { google.accounts.oauth2.revoke(_token, () => {}); } catch {} }
+    _token = null;
+    _tokenExp = 0;
+    _user = null;
+    localStorage.removeItem(GTOKEN_KEY);
+    localStorage.removeItem(GTOKEN_EXP_KEY);
+    localStorage.removeItem(GUSER_KEY);
+  }
+
+  function getUser() { return _user; }
+
+  async function getToken() {
+    if (_token && _tokenExp > Date.now() + 60000) return _token;
+    if (_tokenRefreshPromise) return _tokenRefreshPromise;
+    _tokenRefreshPromise = new Promise((resolve, reject) => {
+      _tokenClient.callback = resp => {
+        _tokenRefreshPromise = null;
+        if (resp.error) { reject(new Error(resp.error)); return; }
+        _token = resp.access_token;
+        _tokenExp = Date.now() + (resp.expires_in || 3600) * 1000;
+        localStorage.setItem(GTOKEN_KEY, _token);
+        localStorage.setItem(GTOKEN_EXP_KEY, String(_tokenExp));
+        resolve(_token);
+      };
+      _tokenClient.requestAccessToken({ prompt: '' });
+    });
+    return _tokenRefreshPromise;
+  }
+
+  async function dFetch(method, path, body, contentType) {
+    const token = await getToken();
+    const headers = { Authorization: `Bearer ${token}` };
+    if (contentType) headers['Content-Type'] = contentType;
+    const res = await fetch(`${DRIVE}${path}`, { method, headers, body: body !== undefined ? body : undefined });
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const err = new Error(`Drive ${method} ${path} -> ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    if (res.status === 204) return null;
+    const ct = res.headers.get('content-type') || '';
+    return ct.includes('json') ? res.json() : res.text();
+  }
+
+  function _loadFolderCache(rootId) {
+    try {
+      const c = JSON.parse(sessionStorage.getItem(FCACHE_KEY) || '{}');
+      return c.root === rootId ? c.ids || {} : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function _saveFolderCache(rootId, ids) {
+    const fi = {};
+    for (const [k, v] of Object.entries(ids)) {
+      if (!k.split('/').pop().includes('.')) fi[k] = v;
+    }
+    try {
+      sessionStorage.setItem(FCACHE_KEY, JSON.stringify({ root: rootId, ids: fi }));
+    } catch {}
+  }
+
+  const DriveStorage = {
+    _rootId: null,
+    _ids: {},
+    init(rootFolderId) {
+      this._rootId = rootFolderId;
+      this._ids = _loadFolderCache(rootFolderId);
+    },
+    async _dir(folderPath) {
+      if (!folderPath) return this._rootId;
+      if (this._ids[folderPath]) return this._ids[folderPath];
+      const parts = folderPath.split('/').filter(Boolean);
+      let parentId = this._rootId;
+      let cur = '';
+      let cacheUpdated = false;
+      for (const name of parts) {
+        cur = cur ? `${cur}/${name}` : name;
+        if (this._ids[cur]) { parentId = this._ids[cur]; continue; }
+        const q = `name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        const r = await dFetch('GET', `/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`);
+        let id = r && r.files && r.files[0] ? r.files[0].id : null;
+        if (!id) {
+          const cr = await dFetch('POST', '/files?fields=id', JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }), 'application/json');
+          id = cr ? cr.id : null;
+        }
+        if (!id) throw new Error(`Cannot find or create folder: ${cur}`);
+        this._ids[cur] = id;
+        parentId = id;
+        cacheUpdated = true;
+      }
+      if (cacheUpdated) _saveFolderCache(this._rootId, this._ids);
+      return parentId;
+    },
+    async readFile(rel) {
+      if (!this._ids[rel]) {
+        const parts = rel.split('/');
+        const name = parts.pop();
+        const parentId = await this._dir(parts.join('/'));
+        const q = `name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and trashed=false`;
+        const r = await dFetch('GET', `/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`);
+        const id = r && r.files && r.files[0] ? r.files[0].id : null;
+        if (!id) return null;
+        this._ids[rel] = id;
+      }
+      const token = await getToken();
+      const res = await fetch(`${DRIVE}/files/${this._ids[rel]}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.ok ? res.text() : null;
+    },
+    async writeFile(rel, content) {
+      if (!this._ids[rel]) {
+        const parts = rel.split('/');
+        const name = parts.pop();
+        const parentId = await this._dir(parts.join('/'));
+        const q = `name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and trashed=false`;
+        const r = await dFetch('GET', `/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`);
+        const id = r && r.files && r.files[0] ? r.files[0].id : null;
+        if (id) this._ids[rel] = id;
+      }
+      const token = await getToken();
+      if (this._ids[rel]) {
+        const r = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${this._ids[rel]}?uploadType=media`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain; charset=utf-8' },
+          body: content
+        });
+        if (!r.ok) throw new Error(`Drive PATCH ${rel} -> ${r.status}: ${await r.text()}`);
+      } else {
+        const parts = rel.split('/');
+        const name = parts.pop();
+        const parentId = await this._dir(parts.join('/'));
+        const meta = JSON.stringify({ name, parents: [parentId], mimeType: 'text/plain' });
+        const body = `--stoult_b\r\nContent-Type: application/json\r\n\r\n${meta}\r\n--stoult_b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${content}\r\n--stoult_b--`;
+        const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/related; boundary=stoult_b' },
+          body
+        });
+        if (!r.ok) throw new Error(`Drive POST ${rel} -> ${r.status}: ${await r.text()}`);
+        this._ids[rel] = (await r.json()).id;
+      }
+    },
+    async listFiles(rel) {
+      const folderId = await this._dir(rel);
+      const q = `'${folderId}' in parents and trashed=false`;
+      const files = [];
+      let pageToken = '';
+      do {
+        const tokenParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+        const r = await dFetch('GET', `/files?q=${encodeURIComponent(q)}&fields=nextPageToken,files(id,name,mimeType)&pageSize=1000${tokenParam}`);
+        files.push(...((r && r.files) || []));
+        pageToken = (r && r.nextPageToken) || '';
+      } while (pageToken);
+      for (const f of files) this._ids[`${rel}/${f.name}`] = f.id;
+      return files.map(f => ({ name: f.name, file: f.mimeType !== 'application/vnd.google-apps.folder' || undefined }));
+    },
+    async ensureFolder(rel) { await this._dir(rel); }
+  };
+
+  const FSALStorage = {
+    _root: null,
+    _dirCache: {},
+    async init(h) {
+      this._root = h;
+      this._dirCache = {};
+      await _saveHandle(h);
+    },
+    async _traverse(rel, create = false) {
+      const parts = rel.split('/').filter(Boolean);
+      let node = this._root;
+      let prefix = '';
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        const isLast = i === parts.length - 1;
+        const isFile = isLast && p.includes('.');
+        const cur = prefix ? `${prefix}/${p}` : p;
+        if (isFile) {
+          node = await node.getFileHandle(p, { create });
+        } else {
+          if (!create && this._dirCache[cur]) {
+            node = this._dirCache[cur];
+          } else {
+            node = await node.getDirectoryHandle(p, { create });
+            if (!create) this._dirCache[cur] = node;
+          }
+        }
+        prefix = cur;
+      }
+      return node;
+    },
+    async readFile(rel) { try { const fh = await this._traverse(rel); return await (await fh.getFile()).text(); } catch { return null; } },
+    async writeFile(rel, content) { const fh = await this._traverse(rel, true); const w = await fh.createWritable(); await w.write(content); await w.close(); },
+    async listFiles(rel) { try { const dir = await this._traverse(rel); const out = []; for await (const [name, h] of dir.entries()) out.push({ name, file: h.kind === 'file' || undefined }); return out; } catch { return []; } },
+    async ensureFolder(rel) { await this._traverse(rel, true); }
+  };
+
+  function _openIDB() {
+    return new Promise((res, rej) => {
+      const req = indexedDB.open(IDB_DB, 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+      req.onsuccess = e => res(e.target.result);
+      req.onerror = e => rej(e.target.error);
+    });
+  }
+  async function _saveHandle(h) {
+    const db = await _openIDB();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(h, IDB_KEY);
+      tx.oncomplete = res;
+      tx.onerror = rej;
+    });
+  }
+  async function loadHandle() {
+    try {
+      const db = await _openIDB();
+      return await new Promise((res, rej) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+        req.onsuccess = e => res(e.target.result || null);
+        req.onerror = rej;
+      });
+    } catch {
+      return null;
+    }
+  }
+  async function clearHandle() {
+    try {
+      const db = await _openIDB();
+      await new Promise((res, rej) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).delete(IDB_KEY);
+        tx.oncomplete = res;
+        tx.onerror = rej;
+      });
+    } catch {}
+  }
+
+  return { initGoogle, signIn, signOut, getUser, getToken, DriveStorage, FSALStorage, loadHandle, clearHandle };
+})();
+
+const GOOGLE_CLIENT_ID = '829248142619-hvklu048j23gft4m0d5jeg8l1hjv2lid.apps.googleusercontent.com';
 const BASE = 'References/Trainer';
-const DB_NAME = 'trainer-app';
-const STORE = 'handles';
-const KEY = 'vault';
-let root = null;
+const DRIVE_ROOT_KEY = 'stoult_drive_root';
+let storage = null;
 let state = { profile: null, history: [] };
 let toastTimer = null;
 
@@ -393,82 +760,151 @@ const defaults = {
   notes: ''
 };
 
-document.getElementById('connectBtn').addEventListener('click', connectVault);
+document.getElementById('connectBtn').addEventListener('click', pickLocalVault);
+document.getElementById('googleBtn').addEventListener('click', signInGoogle);
 document.getElementById('reconnectBtn').addEventListener('click', reconnectVault);
+document.getElementById('connectDriveBtn').addEventListener('click', confirmVaultPath);
+document.getElementById('signOutBtn').addEventListener('click', signOutApp);
 document.getElementById('buildBtn').addEventListener('click', buildPlan);
 document.getElementById('saveDayBtn').addEventListener('click', saveDay);
 document.getElementById('dayDate').value = todayISO();
-loadSavedHandle();
 loadProfileIntoForm(defaults);
 renderTargets();
 renderStats();
+renderHistory();
+init();
 
-async function openDb() {
-  return await new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = e => e.target.result.createObjectStore(STORE);
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror = e => reject(e.target.error);
-  });
-}
-
-async function saveHandle(handle) {
-  const db = await openDb();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(handle, KEY);
-    tx.oncomplete = resolve;
-    tx.onerror = reject;
-  });
-}
-
-async function getSavedHandle() {
-  try {
-    const db = await openDb();
-    return await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).get(KEY);
-      req.onsuccess = e => resolve(e.target.result || null);
-      req.onerror = reject;
-    });
-  } catch {
-    return null;
+async function init() {
+  const handle = await STOULT.loadHandle();
+  if (handle) {
+    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') return initWithFSAL(handle);
+    if (perm === 'prompt') return showReconnectGate(handle);
   }
-}
-
-async function loadSavedHandle() {
-  const handle = await getSavedHandle();
-  if (!handle) return;
-  const perm = await handle.queryPermission({ mode: 'readwrite' });
-  if (perm === 'granted') {
-    root = handle;
-    await afterConnect();
+  if (GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID') {
+    const hasSession = await STOULT.initGoogle(GOOGLE_CLIENT_ID);
+    if (hasSession) return initWithDrive();
   }
+  showSetupGate();
 }
 
-async function connectVault() {
+function showSetupGate() {
+  document.getElementById('authGate').style.display = '';
+  document.getElementById('setupOptions').style.display = '';
+  document.getElementById('reconnectRow').style.display = 'none';
+  document.getElementById('vaultPathRow').style.display = 'none';
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('signOutBtn').style.display = 'none';
+  document.getElementById('statusMode').textContent = 'private vault';
+  document.getElementById('vaultName').textContent = 'not connected';
+}
+
+function showReconnectGate(handle) {
+  window._pendingHandle = handle;
+  document.getElementById('authGate').style.display = '';
+  document.getElementById('setupOptions').style.display = 'none';
+  document.getElementById('reconnectRow').style.display = '';
+  document.getElementById('vaultPathRow').style.display = 'none';
+  document.getElementById('appShell').style.display = 'none';
+}
+
+function showVaultPathGate() {
+  document.getElementById('authGate').style.display = '';
+  document.getElementById('setupOptions').style.display = 'none';
+  document.getElementById('reconnectRow').style.display = 'none';
+  document.getElementById('vaultPathRow').style.display = '';
+  document.getElementById('appShell').style.display = 'none';
+}
+
+function showApp(displayName, modeLabel) {
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('appShell').style.display = '';
+  document.getElementById('signOutBtn').style.display = '';
+  document.getElementById('statusMode').textContent = modeLabel;
+  document.getElementById('vaultName').textContent = displayName || 'vault';
+}
+
+async function pickLocalVault() {
   if (!window.showDirectoryPicker) return toast('Folder picker is not supported in this browser.', 'error');
   try {
-    root = await window.showDirectoryPicker({ mode: 'readwrite' });
-    await saveHandle(root);
-    await afterConnect();
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    await initWithFSAL(handle);
   } catch (e) {
     if (e.name !== 'AbortError') toast('Could not open folder.', 'error');
   }
 }
 
 async function reconnectVault() {
-  const handle = await getSavedHandle();
+  const handle = window._pendingHandle;
   if (!handle) return toast('No saved vault handle yet.', 'error');
   const perm = await handle.requestPermission({ mode: 'readwrite' });
   if (perm !== 'granted') return toast('Folder permission was not granted.', 'error');
-  root = handle;
-  await afterConnect();
+  await initWithFSAL(handle);
 }
 
-async function afterConnect() {
-  document.getElementById('vaultName').textContent = root.name;
-  await ensureFolder('References');
+async function initWithFSAL(handle) {
+  await STOULT.FSALStorage.init(handle);
+  storage = STOULT.FSALStorage;
+  showApp(handle.name, 'local vault');
+  await loadAll();
+}
+
+async function signInGoogle() {
+  try {
+    if (GOOGLE_CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID') return toast('Google client id is not configured.', 'error');
+    await STOULT.initGoogle(GOOGLE_CLIENT_ID);
+    await STOULT.signIn();
+    showVaultPathGate();
+  } catch (e) {
+    console.error(e);
+    toast('Sign-in failed.', 'error');
+  }
+}
+
+async function initWithDrive() {
+  const user = STOULT.getUser();
+  if (!user) return showSetupGate();
+  const rootId = localStorage.getItem(DRIVE_ROOT_KEY);
+  if (!rootId) return showVaultPathGate();
+  STOULT.DriveStorage.init(rootId);
+  storage = STOULT.DriveStorage;
+  showApp(user.email || user.name || 'google drive', 'google drive');
+  await loadAll();
+}
+
+async function confirmVaultPath() {
+  const name = document.getElementById('vaultPathInput').value.trim();
+  if (!name) return;
+  try {
+    const token = await STOULT.getToken();
+    const q = `name='${name}' and mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false`;
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (!data.files || !data.files.length) return toast(`Folder "${name}" not found in Drive.`, 'error');
+    localStorage.setItem(DRIVE_ROOT_KEY, data.files[0].id);
+    await initWithDrive();
+  } catch (e) {
+    console.error(e);
+    toast('Could not find vault folder.', 'error');
+  }
+}
+
+async function signOutApp() {
+  STOULT.signOut();
+  await STOULT.clearHandle();
+  localStorage.removeItem(DRIVE_ROOT_KEY);
+  storage = null;
+  state = { profile: null, history: [] };
+  loadProfileIntoForm(defaults);
+  renderTargets();
+  renderStats();
+  renderHistory();
+  showSetupGate();
+}
+
+async function loadAll() {
   await ensureFolder(BASE);
   await ensureFolder(`${BASE}/Days`);
   state.profile = await readProfile();
@@ -480,34 +916,9 @@ async function afterConnect() {
   toast('Vault connected.');
 }
 
-async function traverse(path, create = false) {
-  const parts = path.split('/').filter(Boolean);
-  let node = root;
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    const isFile = i === parts.length - 1 && part.includes('.');
-    node = isFile
-      ? await node.getFileHandle(part, { create })
-      : await node.getDirectoryHandle(part, { create });
-  }
-  return node;
-}
-
-async function ensureFolder(path) { await traverse(path, true); }
-async function readFile(path) {
-  try {
-    const fh = await traverse(path, false);
-    return await (await fh.getFile()).text();
-  } catch {
-    return null;
-  }
-}
-async function writeFile(path, content) {
-  const fh = await traverse(path, true);
-  const writer = await fh.createWritable();
-  await writer.write(content);
-  await writer.close();
-}
+async function ensureFolder(path) { if (storage) await storage.ensureFolder(path); }
+async function readFile(path) { return storage ? await storage.readFile(path) : null; }
+async function writeFile(path, content) { if (storage) await storage.writeFile(path, content); }
 
 function parseFrontmatter(raw) {
   if (!raw) return { meta: {}, body: '' };
@@ -552,15 +963,13 @@ async function readProfile() {
 }
 
 async function readHistory() {
-  const dir = await traverse(`${BASE}/Days`, false).catch(() => null);
-  if (!dir) return [];
+  const files = storage ? await storage.listFiles(`${BASE}/Days`) : [];
   const rows = [];
-  for await (const [name, handle] of dir.entries()) {
-    if (handle.kind !== 'file' || !name.endsWith('.md')) continue;
-    const raw = await (await handle.getFile()).text();
+  for (const file of files.filter(f => f.name && f.name.endsWith('.md'))) {
+    const raw = await readFile(`${BASE}/Days/${file.name}`);
     const { meta } = parseFrontmatter(raw);
     rows.push({
-      date: name.replace(/\.md$/i, ''),
+      date: file.name.replace(/\.md$/i, ''),
       steps: Number(meta.steps || 0),
       calories: Number(meta.calories || 0),
       protein: Number(meta.protein || 0),
@@ -688,7 +1097,7 @@ function buildMeals(profile, t) {
 }
 
 async function buildPlan() {
-  if (!root) return toast('Connect a vault folder first.', 'error');
+  if (!storage) return toast('Connect a vault folder first.', 'error');
   const profile = collectProfile();
   Object.assign(profile, targets(profile));
   state.profile = profile;
@@ -719,7 +1128,7 @@ async function buildPlan() {
 }
 
 async function saveDay() {
-  if (!root) return toast('Connect a vault folder first.', 'error');
+  if (!storage) return toast('Connect a vault folder first.', 'error');
   const date = document.getElementById('dayDate').value || todayISO();
   await writeFile(`${BASE}/Days/${date}.md`, markdown({
     date,
