@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>the trainer</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><circle cx='250' cy='250' r='210' fill='none' stroke='%23e8e0d4' stroke-width='26'/><path d='M135 270 Q250 220 365 255' fill='none' stroke='%23c8a96e' stroke-width='22' stroke-linecap='round'/></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500&family=Victor+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@font-face {
+  font-family: 'Diesel Rudolf';
+  src: url('../branding/Diesel-Rudolf_reduced.otf') format('opentype');
+}
+:root {
+  --bg: #1a1612;
+  --bg2: #221e19;
+  --card: #2a2420;
+  --card2: #322c26;
+  --border: rgba(200,169,110,0.14);
+  --border2: rgba(200,169,110,0.28);
+  --amber: #c8a96e;
+  --amber-dim: #9a7e4f;
+  --cream: #e8e0d4;
+  --muted: #8a8070;
+  --green: #70a880;
+  --red: #c87060;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--cream);
+  font-family: 'IBM Plex Sans', sans-serif;
+  min-height: 100vh;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 16px 56px;
+}
+.header, .row, .actions, .history-item { display: flex; }
+.header {
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.wordmark {
+  font-family: 'Diesel Rudolf', serif;
+  font-size: 40px;
+  line-height: 1;
+}
+.wordmark em { color: var(--amber); font-style: normal; }
+.back-link, .eyebrow, .label, .stat-label, .pill, .btn, .input, .select {
+  font-family: 'Victor Mono', monospace;
+}
+.back-link, .eyebrow, .label, .stat-label, .pill {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.back-link {
+  color: var(--muted);
+  text-decoration: none;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+.status {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.02);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.status-copy { display: grid; gap: 2px; }
+.status-copy .eyebrow { color: var(--muted); }
+.status-copy strong {
+  font-family: 'IBM Plex Sans', sans-serif;
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 400;
+}
+.seam {
+  width: 100%;
+  height: 20px;
+  margin: 10px 0 18px;
+  display: block;
+}
+.overview, .section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.overview {
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 18px;
+  align-items: center;
+}
+.overview-copy, .copy, .callout, .history-sub, .empty {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.overview-copy { margin-top: 8px; color: var(--amber); }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.stat {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.stat strong {
+  font-family: 'Crimson Text', serif;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 400;
+}
+.stat-label { color: var(--muted); display: block; margin-top: 6px; }
+.layout {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 18px;
+}
+.section {
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.copy { margin: 10px 0 16px; }
+.callout {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--amber);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.field { display: grid; gap: 8px; margin-bottom: 14px; }
+.label { color: var(--muted); }
+.input, .select, .textarea {
+  width: 100%;
+  background: var(--bg2);
+  color: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 13px;
+  font-size: 12px;
+}
+.textarea {
+  min-height: 140px;
+  resize: vertical;
+  font-family: 'IBM Plex Sans', sans-serif;
+  line-height: 1.6;
+}
+.actions {
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.btn {
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.btn-primary {
+  background: var(--amber);
+  color: var(--bg);
+  border: 1px solid var(--amber);
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border2);
+}
+.history-list { display: grid; gap: 12px; }
+.history-item {
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 15px;
+}
+.history-title {
+  font-family: 'Crimson Text', serif;
+  font-size: 22px;
+  line-height: 1.1;
+}
+.history-sub { margin-top: 6px; }
+.pill {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 7px;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  color: var(--muted);
+}
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  opacity: 0.45;
+}
+.footer span {
+  font-family: 'Victor Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  min-width: 220px;
+  max-width: 320px;
+  background: rgba(34,30,25,0.96);
+  color: var(--cream);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: all 0.18s ease;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.error { border-color: rgba(200,112,96,0.45); }
+@media (max-width: 960px) {
+  .overview, .layout { grid-template-columns: 1fr; }
+  .stats, .field-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  body { padding: 16px 12px 40px; }
+  .wordmark { font-size: 32px; }
+  .stats, .field-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<header class="header">
+  <div>
+    <a class="back-link" href="https://www.stoult.com/workshop/">back to workshop</a>
+    <div class="wordmark">the <em>Trainer</em></div>
+  </div>
+  <div class="status">
+    <div class="dot"></div>
+    <div class="status-copy">
+      <div class="eyebrow">local vault</div>
+      <strong id="vaultName">not connected</strong>
+    </div>
+  </div>
+</header>
+
+<svg class="seam" viewBox="0 0 900 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 12 Q225 6 450 11 Q675 16 900 9" fill="none" stroke="var(--amber)" stroke-width="1" opacity="0.4"></path>
+</svg>
+
+<section class="overview">
+  <div>
+    <div class="eyebrow">overview</div>
+    <div class="overview-copy">A local-first fitness and meal planner that stores the profile, plans, and daily logs as markdown in <code>References/Trainer</code>.</div>
+  </div>
+  <div class="stats" id="stats"></div>
+</section>
+
+<div class="layout">
+  <div>
+    <section class="section">
+      <div class="eyebrow">connect</div>
+      <div class="copy">Pick the user's vault folder. The Trainer will create <code>Profile.md</code>, <code>Workout Plan.md</code>, <code>Meal Plan.md</code>, and a <code>Days</code> folder under <code>References/Trainer</code>.</div>
+      <div class="actions">
+        <button class="btn btn-primary" id="connectBtn">pick folder</button>
+        <button class="btn btn-secondary" id="reconnectBtn">reconnect saved folder</button>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="eyebrow">profile builder</div>
+      <div class="copy">This first pass creates a practical baseline: calories, protein, step goal, a weekly lifting split, and a meal cadence the user can edit directly in markdown.</div>
+      <div class="field-grid">
+        <div class="field"><label class="label" for="goal">goal</label><select class="select" id="goal"><option value="lose-fat">lose fat</option><option value="maintain">maintain</option><option value="gain-muscle">gain muscle</option></select></div>
+        <div class="field"><label class="label" for="sex">sex for estimate</label><select class="select" id="sex"><option value="female">female</option><option value="male">male</option><option value="other">other</option></select></div>
+        <div class="field"><label class="label" for="age">age</label><input class="input" id="age" type="number" min="18" max="99"></div>
+        <div class="field"><label class="label" for="height">height cm</label><input class="input" id="height" type="number" min="120" max="240"></div>
+        <div class="field"><label class="label" for="weight">current weight kg</label><input class="input" id="weight" type="number" min="35" max="300" step="0.1"></div>
+        <div class="field"><label class="label" for="targetWeight">target weight kg</label><input class="input" id="targetWeight" type="number" min="35" max="300" step="0.1"></div>
+        <div class="field"><label class="label" for="activity">activity level</label><select class="select" id="activity"><option value="sedentary">sedentary</option><option value="light">light</option><option value="moderate">moderate</option><option value="active">active</option></select></div>
+        <div class="field"><label class="label" for="trainingDays">training days per week</label><input class="input" id="trainingDays" type="number" min="2" max="6"></div>
+        <div class="field"><label class="label" for="sessionMinutes">session minutes</label><input class="input" id="sessionMinutes" type="number" min="20" max="120" step="5"></div>
+        <div class="field"><label class="label" for="mealsPerDay">meals per day</label><input class="input" id="mealsPerDay" type="number" min="3" max="5"></div>
+      </div>
+      <div class="field"><label class="label" for="equipment">equipment available</label><input class="input" id="equipment" placeholder="dumbbells, bands, treadmill"></div>
+      <div class="field"><label class="label" for="dietStyle">diet style</label><select class="select" id="dietStyle"><option value="high-protein">high protein omnivore</option><option value="vegetarian">vegetarian</option><option value="pescatarian">pescatarian</option></select></div>
+      <div class="field"><label class="label" for="preferences">preferences or constraints</label><input class="input" id="preferences" placeholder="dairy free, fast lunches, low prep"></div>
+      <div class="field"><label class="label" for="profileNotes">notes</label><textarea class="textarea" id="profileNotes" placeholder="Injuries, timing issues, habits, recovery, anything the plan should respect."></textarea></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="buildBtn">build and save plan</button>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="eyebrow">daily log</div>
+      <div class="field-grid">
+        <div class="field"><label class="label" for="dayDate">date</label><input class="input" id="dayDate" type="date"></div>
+        <div class="field"><label class="label" for="steps">steps</label><input class="input" id="steps" type="number" min="0"></div>
+        <div class="field"><label class="label" for="calories">calories</label><input class="input" id="calories" type="number" min="0"></div>
+        <div class="field"><label class="label" for="protein">protein g</label><input class="input" id="protein" type="number" min="0"></div>
+        <div class="field"><label class="label" for="water">water oz</label><input class="input" id="water" type="number" min="0"></div>
+        <div class="field"><label class="label" for="workout">workout</label><input class="input" id="workout" placeholder="upper, walk, rest"></div>
+      </div>
+      <div class="field"><label class="label" for="dayNotes">notes</label><textarea class="textarea" id="dayNotes" placeholder="Energy, hunger, soreness, wins, problems."></textarea></div>
+      <div class="actions">
+        <button class="btn btn-secondary" id="saveDayBtn">save day</button>
+      </div>
+    </section>
+  </div>
+
+  <div>
+    <section class="section">
+      <div class="eyebrow">targets</div>
+      <div class="history-list" id="targetList"></div>
+    </section>
+
+    <section class="section">
+      <div class="eyebrow">fitness sync note</div>
+      <div class="callout">Google Fit is not a safe long-term integration target for a new web-first app. The Trainer therefore logs steps in markdown today and is designed so a future Android companion could write daily totals back into the same vault.</div>
+    </section>
+
+    <section class="section">
+      <div class="eyebrow">recent days</div>
+      <div class="history-list" id="history"></div>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer class="footer">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="24" height="24" aria-hidden="true">
+    <circle cx="250" cy="250" r="210" fill="none" stroke="#e8e0d4" stroke-width="26"></circle>
+    <path d="M135 270 Q250 220 365 255" fill="none" stroke="#c8a96e" stroke-width="22" stroke-linecap="round"></path>
+  </svg>
+  <span>stoult.com</span>
+</footer>
+
+<script>
+const BASE = 'References/Trainer';
+const DB_NAME = 'trainer-app';
+const STORE = 'handles';
+const KEY = 'vault';
+let root = null;
+let state = { profile: null, history: [] };
+let toastTimer = null;
+
+const defaults = {
+  goal: 'lose-fat',
+  sex: 'female',
+  age: 35,
+  height: 168,
+  weight: 82,
+  targetWeight: 74,
+  activity: 'light',
+  trainingDays: 4,
+  sessionMinutes: 45,
+  mealsPerDay: 4,
+  equipment: 'dumbbells, bands, bodyweight',
+  dietStyle: 'high-protein',
+  preferences: '',
+  notes: ''
+};
+
+document.getElementById('connectBtn').addEventListener('click', connectVault);
+document.getElementById('reconnectBtn').addEventListener('click', reconnectVault);
+document.getElementById('buildBtn').addEventListener('click', buildPlan);
+document.getElementById('saveDayBtn').addEventListener('click', saveDay);
+document.getElementById('dayDate').value = todayISO();
+loadSavedHandle();
+loadProfileIntoForm(defaults);
+renderTargets();
+renderStats();
+
+async function openDb() {
+  return await new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(STORE);
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = e => reject(e.target.error);
+  });
+}
+
+async function saveHandle(handle) {
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(handle, KEY);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+}
+
+async function getSavedHandle() {
+  try {
+    const db = await openDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).get(KEY);
+      req.onsuccess = e => resolve(e.target.result || null);
+      req.onerror = reject;
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function loadSavedHandle() {
+  const handle = await getSavedHandle();
+  if (!handle) return;
+  const perm = await handle.queryPermission({ mode: 'readwrite' });
+  if (perm === 'granted') {
+    root = handle;
+    await afterConnect();
+  }
+}
+
+async function connectVault() {
+  if (!window.showDirectoryPicker) return toast('Folder picker is not supported in this browser.', 'error');
+  try {
+    root = await window.showDirectoryPicker({ mode: 'readwrite' });
+    await saveHandle(root);
+    await afterConnect();
+  } catch (e) {
+    if (e.name !== 'AbortError') toast('Could not open folder.', 'error');
+  }
+}
+
+async function reconnectVault() {
+  const handle = await getSavedHandle();
+  if (!handle) return toast('No saved vault handle yet.', 'error');
+  const perm = await handle.requestPermission({ mode: 'readwrite' });
+  if (perm !== 'granted') return toast('Folder permission was not granted.', 'error');
+  root = handle;
+  await afterConnect();
+}
+
+async function afterConnect() {
+  document.getElementById('vaultName').textContent = root.name;
+  await ensureFolder('References');
+  await ensureFolder(BASE);
+  await ensureFolder(`${BASE}/Days`);
+  state.profile = await readProfile();
+  state.history = await readHistory();
+  loadProfileIntoForm(state.profile);
+  renderTargets();
+  renderStats();
+  renderHistory();
+  toast('Vault connected.');
+}
+
+async function traverse(path, create = false) {
+  const parts = path.split('/').filter(Boolean);
+  let node = root;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const isFile = i === parts.length - 1 && part.includes('.');
+    node = isFile
+      ? await node.getFileHandle(part, { create })
+      : await node.getDirectoryHandle(part, { create });
+  }
+  return node;
+}
+
+async function ensureFolder(path) { await traverse(path, true); }
+async function readFile(path) {
+  try {
+    const fh = await traverse(path, false);
+    return await (await fh.getFile()).text();
+  } catch {
+    return null;
+  }
+}
+async function writeFile(path, content) {
+  const fh = await traverse(path, true);
+  const writer = await fh.createWritable();
+  await writer.write(content);
+  await writer.close();
+}
+
+function parseFrontmatter(raw) {
+  if (!raw) return { meta: {}, body: '' };
+  const match = raw.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!match) return { meta: {}, body: raw };
+  const meta = {};
+  match[1].split('\n').forEach(line => {
+    const hit = line.match(/^([\w-]+):\s*(.*)$/);
+    if (hit) meta[hit[1]] = hit[2];
+  });
+  return { meta, body: match[2].trim() };
+}
+
+function markdown(meta, body) {
+  return ['---', ...Object.entries(meta).filter(([,v]) => v !== '' && v != null).map(([k,v]) => `${k}: ${v}`), '---', '', body || ''].join('\n');
+}
+
+async function readProfile() {
+  const raw = await readFile(`${BASE}/Profile.md`);
+  if (!raw) return { ...defaults, caloriesTarget: '', proteinTarget: '', stepGoal: '', waterGoal: '' };
+  const { meta, body } = parseFrontmatter(raw);
+  return {
+    goal: meta.goal || defaults.goal,
+    sex: meta.sex || defaults.sex,
+    age: Number(meta.age || defaults.age),
+    height: Number(meta.height_cm || defaults.height),
+    weight: Number(meta.weight_kg || defaults.weight),
+    targetWeight: Number(meta.target_weight_kg || defaults.targetWeight),
+    activity: meta.activity || defaults.activity,
+    trainingDays: Number(meta.training_days || defaults.trainingDays),
+    sessionMinutes: Number(meta.session_minutes || defaults.sessionMinutes),
+    mealsPerDay: Number(meta.meals_per_day || defaults.mealsPerDay),
+    equipment: meta.equipment || defaults.equipment,
+    dietStyle: meta.diet_style || defaults.dietStyle,
+    preferences: meta.preferences || defaults.preferences,
+    notes: body || '',
+    caloriesTarget: Number(meta.calories_target || 0),
+    proteinTarget: Number(meta.protein_target || 0),
+    stepGoal: Number(meta.step_goal || 0),
+    waterGoal: Number(meta.water_goal || 0)
+  };
+}
+
+async function readHistory() {
+  const dir = await traverse(`${BASE}/Days`, false).catch(() => null);
+  if (!dir) return [];
+  const rows = [];
+  for await (const [name, handle] of dir.entries()) {
+    if (handle.kind !== 'file' || !name.endsWith('.md')) continue;
+    const raw = await (await handle.getFile()).text();
+    const { meta } = parseFrontmatter(raw);
+    rows.push({
+      date: name.replace(/\.md$/i, ''),
+      steps: Number(meta.steps || 0),
+      calories: Number(meta.calories || 0),
+      protein: Number(meta.protein || 0),
+      workout: meta.workout || ''
+    });
+  }
+  return rows.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+}
+
+function loadProfileIntoForm(p) {
+  set('goal', p.goal);
+  set('sex', p.sex);
+  set('age', p.age);
+  set('height', p.height);
+  set('weight', p.weight);
+  set('targetWeight', p.targetWeight);
+  set('activity', p.activity);
+  set('trainingDays', p.trainingDays);
+  set('sessionMinutes', p.sessionMinutes);
+  set('mealsPerDay', p.mealsPerDay);
+  set('equipment', p.equipment);
+  set('dietStyle', p.dietStyle);
+  set('preferences', p.preferences);
+  set('profileNotes', p.notes || '');
+}
+
+function set(id, value) { document.getElementById(id).value = value == null ? '' : value; }
+function num(id, fallback = 0) {
+  const n = Number(document.getElementById(id).value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function collectProfile() {
+  return {
+    goal: document.getElementById('goal').value,
+    sex: document.getElementById('sex').value,
+    age: num('age', defaults.age),
+    height: num('height', defaults.height),
+    weight: num('weight', defaults.weight),
+    targetWeight: num('targetWeight', defaults.targetWeight),
+    activity: document.getElementById('activity').value,
+    trainingDays: num('trainingDays', defaults.trainingDays),
+    sessionMinutes: num('sessionMinutes', defaults.sessionMinutes),
+    mealsPerDay: num('mealsPerDay', defaults.mealsPerDay),
+    equipment: document.getElementById('equipment').value.trim(),
+    dietStyle: document.getElementById('dietStyle').value,
+    preferences: document.getElementById('preferences').value.trim(),
+    notes: document.getElementById('profileNotes').value.trim()
+  };
+}
+
+function targets(profile) {
+  const adjust = profile.sex === 'male' ? 5 : profile.sex === 'female' ? -161 : -78;
+  const bmr = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + adjust;
+  const mult = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725 }[profile.activity] || 1.375;
+  const tdee = bmr * mult;
+  const delta = { 'lose-fat': -350, maintain: 0, 'gain-muscle': 250 }[profile.goal] || 0;
+  const proteinFactor = { 'lose-fat': 1.9, maintain: 1.6, 'gain-muscle': 1.8 }[profile.goal] || 1.6;
+  let steps = { sedentary: 6500, light: 8000, moderate: 9000, active: 10500 }[profile.activity] || 8000;
+  if (profile.goal === 'lose-fat') steps += 1000;
+  return {
+    caloriesTarget: roundTo(Math.max(1400, tdee + delta), 25),
+    proteinTarget: roundTo(Math.max(100, profile.weight * proteinFactor), 5),
+    stepGoal: Math.min(13000, Math.max(6000, steps)),
+    waterGoal: roundTo(Math.max(70, profile.weight * 1.1), 4)
+  };
+}
+
+function roundTo(n, step) { return Math.round(n / step) * step; }
+
+function buildWorkout(profile, t) {
+  const days = Math.max(2, Math.min(6, profile.trainingDays));
+  const labels = days <= 3
+    ? ['Full body A', 'Full body B', 'Conditioning and core']
+    : ['Upper strength', 'Lower strength', 'Upper volume', 'Lower volume', 'Conditioning', 'Full body reset'];
+  const rows = [
+    '# Weekly training structure',
+    '',
+    `- Goal: ${profile.goal}`,
+    `- Session cap: ${profile.sessionMinutes} minutes`,
+    `- Daily step floor: ${t.stepGoal}`,
+    ''
+  ];
+  for (let i = 0; i < days; i++) {
+    rows.push(`## Day ${i + 1} - ${labels[i]}`);
+    rows.push('- Warm-up: 5 minutes easy cardio plus mobility');
+    rows.push('- Main lift 1: squat or split squat - 3 to 4 x 5 to 8');
+    rows.push('- Main lift 2: push variation - 3 to 4 x 6 to 10');
+    rows.push('- Main lift 3: row or pulldown - 3 to 4 x 8 to 12');
+    rows.push('- Accessory: hinge or glute work - 2 to 3 x 8 to 12');
+    rows.push('- Finish: 8 to 15 minutes easy conditioning');
+    rows.push('');
+  }
+  rows.push('## Notes');
+  rows.push('- Progress by adding reps until the top of the range, then add load.');
+  rows.push('- Keep 1 to 2 reps in reserve on most sets.');
+  return rows.join('\n');
+}
+
+function buildMeals(profile, t) {
+  const meals = Math.max(3, Math.min(5, profile.mealsPerDay));
+  const share = meals === 3 ? [0.3, 0.35, 0.35] : meals === 5 ? [0.18, 0.24, 0.24, 0.17, 0.17] : [0.25, 0.3, 0.3, 0.15];
+  const labels = meals === 3 ? ['Breakfast', 'Lunch', 'Dinner'] : meals === 5 ? ['Breakfast', 'Lunch', 'Dinner', 'Snack 1', 'Snack 2'] : ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+  const rows = [
+    '# Daily nutrition structure',
+    '',
+    `- Calories: ${t.caloriesTarget}`,
+    `- Protein: ${t.proteinTarget} g`,
+    `- Water: ${t.waterGoal} oz`,
+    ''
+  ];
+  labels.forEach((label, i) => {
+    rows.push(`## ${label} - about ${roundTo(t.caloriesTarget * share[i], 25)} kcal`);
+    rows.push(`- Protein anchor: about ${roundTo(t.proteinTarget / meals, 5)} g`);
+    rows.push('- Produce: at least one fruit or vegetable');
+    rows.push('- Carbs: oats, rice, potatoes, wraps, beans, or fruit');
+    rows.push('- Fats: olive oil, nuts, avocado, cheese, or nut butter');
+    rows.push('');
+  });
+  rows.push('## Grocery anchors');
+  rows.push('- Proteins: chicken, eggs, yogurt, cottage cheese, tofu, tuna');
+  rows.push('- Carbs: rice, oats, potatoes, fruit, tortillas');
+  rows.push('- Produce: salad greens, berries, broccoli, peppers, frozen vegetables');
+  return rows.join('\n');
+}
+
+async function buildPlan() {
+  if (!root) return toast('Connect a vault folder first.', 'error');
+  const profile = collectProfile();
+  Object.assign(profile, targets(profile));
+  state.profile = profile;
+  await writeFile(`${BASE}/Profile.md`, markdown({
+    goal: profile.goal,
+    sex: profile.sex,
+    age: profile.age,
+    height_cm: profile.height,
+    weight_kg: profile.weight,
+    target_weight_kg: profile.targetWeight,
+    activity: profile.activity,
+    training_days: profile.trainingDays,
+    session_minutes: profile.sessionMinutes,
+    meals_per_day: profile.mealsPerDay,
+    equipment: profile.equipment,
+    diet_style: profile.dietStyle,
+    preferences: profile.preferences,
+    calories_target: profile.caloriesTarget,
+    protein_target: profile.proteinTarget,
+    step_goal: profile.stepGoal,
+    water_goal: profile.waterGoal
+  }, profile.notes));
+  await writeFile(`${BASE}/Workout Plan.md`, markdown({ updated: todayISO(), goal: profile.goal }, buildWorkout(profile, profile)));
+  await writeFile(`${BASE}/Meal Plan.md`, markdown({ updated: todayISO(), calories_target: profile.caloriesTarget }, buildMeals(profile, profile)));
+  renderTargets();
+  renderStats();
+  toast('Profile and plans saved.');
+}
+
+async function saveDay() {
+  if (!root) return toast('Connect a vault folder first.', 'error');
+  const date = document.getElementById('dayDate').value || todayISO();
+  await writeFile(`${BASE}/Days/${date}.md`, markdown({
+    date,
+    steps: num('steps'),
+    calories: num('calories'),
+    protein: num('protein'),
+    water: num('water'),
+    workout: document.getElementById('workout').value.trim()
+  }, document.getElementById('dayNotes').value.trim()));
+  state.history = await readHistory();
+  renderHistory();
+  renderStats();
+  toast('Day saved.');
+}
+
+function renderTargets() {
+  const p = state.profile;
+  const target = document.getElementById('targetList');
+  if (!p || !p.caloriesTarget) {
+    target.innerHTML = `<div class="empty">Build a plan to generate calorie, protein, step, and hydration targets.</div>`;
+    return;
+  }
+  target.innerHTML = `
+    <div class="history-item"><div><div class="history-title">${p.caloriesTarget}</div><div class="history-sub">daily calories</div></div></div>
+    <div class="history-item"><div><div class="history-title">${p.proteinTarget}g</div><div class="history-sub">protein target</div></div></div>
+    <div class="history-item"><div><div class="history-title">${p.stepGoal}</div><div class="history-sub">step floor</div></div></div>
+    <div class="history-item"><div><div class="history-title">${p.waterGoal} oz</div><div class="history-sub">hydration target</div></div></div>
+  `;
+}
+
+function renderStats() {
+  const p = state.profile || {};
+  const today = state.history.find(x => x.date === todayISO()) || { steps: 0, calories: 0, protein: 0 };
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><strong>${fmt(p.caloriesTarget)}</strong><span class="stat-label">calorie target</span></div>
+    <div class="stat"><strong>${fmt(p.proteinTarget)}</strong><span class="stat-label">protein grams</span></div>
+    <div class="stat"><strong>${fmt(p.stepGoal)}</strong><span class="stat-label">step goal</span></div>
+    <div class="stat"><strong>${fmt(today.steps)}</strong><span class="stat-label">today logged</span></div>
+  `;
+}
+
+function renderHistory() {
+  const target = document.getElementById('history');
+  if (!state.history.length) {
+    target.innerHTML = `<div class="empty">No daily markdown files yet.</div>`;
+    return;
+  }
+  target.innerHTML = state.history.map(day => `
+    <div class="history-item">
+      <div>
+        <div class="history-title">${day.date}</div>
+        <div class="history-sub">${fmt(day.steps)} steps, ${fmt(day.calories)} calories, ${fmt(day.protein)}g protein</div>
+        ${day.workout ? `<span class="pill">${escapeHtml(day.workout)}</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function fmt(v) { return v ? Number(v).toLocaleString() : '-'; }
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function escapeHtml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function toast(message, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = message;
+  el.className = `toast show${type ? ` ${type}` : ''}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, 2400);
+}
+</script>
+</body>
+</html>
