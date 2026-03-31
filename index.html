@@ -530,14 +530,17 @@ body {
         <button class="btn btn-secondary" id="cancelWeeklyMenuBtn" style="display:none;">cancel</button>
       </div>
       <div class="field" id="weeklyMenuEditorWrap" style="display:none; margin-top:14px;">
-        <label class="label" for="weeklyMenuEditor">weekly menu markdown</label>
-        <textarea class="textarea" id="weeklyMenuEditor" placeholder="# Weekly menu"></textarea>
+        <label class="label" for="weeklyMenuEditorGrid">meal options by day</label>
+        <div class="history-list" id="weeklyMenuEditorGrid"></div>
       </div>
     </section>
 
     <section class="section">
       <div class="eyebrow">shopping list</div>
       <div class="history-list" id="shoppingList"></div>
+      <div class="actions" id="shoppingListActions" style="display:none; margin-top:14px;">
+        <button class="btn btn-secondary" id="buildShoppingListBtn">build shopping list</button>
+      </div>
     </section>
 
     <section class="section">
@@ -908,6 +911,8 @@ let state = { profile: null, history: [], meals: [], weeklyMenu: [], shoppingLis
 let edamamConfig = defaultEdamamConfig();
 let isEditingProfile = false;
 let isEditingWeeklyMenu = false;
+let weeklyMenuDraft = [];
+let edamamRecipeCache = {};
 let toastTimer = null;
 
 const defaults = {
@@ -945,6 +950,7 @@ document.getElementById('editProfileBtn').addEventListener('click', startProfile
 document.getElementById('editWeeklyMenuBtn').addEventListener('click', startWeeklyMenuEdit);
 document.getElementById('cancelWeeklyMenuBtn').addEventListener('click', cancelWeeklyMenuEdit);
 document.getElementById('saveWeeklyMenuBtn').addEventListener('click', saveWeeklyMenuEdits);
+document.getElementById('buildShoppingListBtn').addEventListener('click', buildShoppingListFromCurrentMenu);
 document.getElementById('dayDate').value = todayISO();
 loadProfileIntoForm(defaults);
 refreshEdamamStatus();
@@ -1824,6 +1830,7 @@ function weeklyMenuToMarkdown(days, generatedBy = 'local') {
   days.forEach(day => {
     rows.push(`## ${day.day}`);
     day.meals.forEach(meal => rows.push(`- ${meal}`));
+    (day.notes || []).forEach(note => rows.push(`- ${note}`));
     rows.push('');
   });
   return rows.join('\n');
@@ -1835,37 +1842,257 @@ function shoppingListToMarkdown(items, generatedBy = 'edamam') {
   return rows.join('\n');
 }
 
+function parseWeeklyMenuLine(line) {
+  const text = String(line || '').trim();
+  const mealMatch = text.match(/^(Breakfast|Lunch|Dinner|Snack(?: \d+)?)\s*:\s*(.+)$/i);
+  if (!mealMatch) return { type: 'note', text };
+  const label = mealMatch[1].replace(/\s+/g, ' ').trim();
+  const rawChoice = mealMatch[2].trim();
+  const choice = rawChoice.replace(/\s+-\s+about\s+.+$/i, '').trim();
+  return { type: 'meal', label, choice };
+}
+
+function mealPoolKey(label) {
+  return String(label || '').toLowerCase().startsWith('snack') ? 'snack' : String(label || '').toLowerCase();
+}
+
+function mealOptionsForLabel(profile, label, currentChoice = '') {
+  const pool = mealLibraryFor(profile || defaults);
+  const key = mealPoolKey(label);
+  const options = [...(pool[key] || pool.snack || [])];
+  state.meals.forEach(meal => {
+    if (meal?.name) options.push(meal.name);
+  });
+  if (currentChoice) options.unshift(currentChoice);
+  return Array.from(new Set(options.filter(Boolean)));
+}
+
+function inferredIngredientsForMeal(choice) {
+  const text = String(choice || '').toLowerCase();
+  const rules = [
+    [['yogurt', 'berries', 'granola'], ['Greek yogurt', 'berries', 'granola']],
+    [['oats', 'banana', 'peanut butter'], ['oats', 'banana', 'peanut butter']],
+    [['egg', 'toast', 'fruit'], ['eggs', 'bread', 'fruit']],
+    [['cottage cheese', 'berries'], ['cottage cheese', 'berries']],
+    [['chicken', 'rice', 'vegetable'], ['chicken', 'rice', 'mixed vegetables']],
+    [['turkey', 'sandwich'], ['turkey slices', 'bread', 'lettuce', 'fruit']],
+    [['taco salad', 'beef', 'beans'], ['lean beef', 'beans', 'salad greens', 'salsa']],
+    [['wrap', 'slaw'], ['wraps', 'protein filling', 'slaw mix']],
+    [['salmon', 'potato', 'green beans'], ['salmon', 'potatoes', 'green beans']],
+    [['burrito bowl'], ['protein filling', 'rice', 'beans', 'salsa', 'avocado']],
+    [['pasta', 'salad'], ['pasta', 'protein filling', 'salad greens']],
+    [['sheet-pan', 'roasted vegetables'], ['protein filling', 'roasting vegetables']],
+    [['tofu', 'rice'], ['tofu', 'rice', 'vegetables']],
+    [['lentil', 'wrap'], ['lentils', 'wraps', 'greens', 'hummus']],
+    [['chickpeas', 'pita'], ['chickpeas', 'pita', 'greens', 'feta']],
+    [['black bean', 'burrito'], ['black beans', 'rice', 'tortillas', 'salsa']],
+    [['stir-fry'], ['protein filling', 'rice', 'stir-fry vegetables']],
+    [['curry'], ['protein filling', 'curry sauce', 'rice']],
+    [['tuna', 'wrap'], ['tuna', 'wraps', 'fruit']],
+    [['shrimp'], ['shrimp', 'rice', 'vegetables']],
+    [['fish tacos'], ['white fish', 'tortillas', 'slaw', 'beans']],
+    [['protein shake'], ['protein powder', 'fruit']],
+    [['string cheese', 'apple'], ['string cheese', 'apples']],
+    [['trail mix', 'jerky'], ['trail mix', 'jerky']],
+    [['hummus', 'pita'], ['hummus', 'pita']],
+    [['cheese', 'crackers'], ['cheese', 'crackers']]
+  ];
+  for (const [needles, items] of rules) {
+    if (needles.every(needle => text.includes(needle))) return items;
+  }
+  const customMeal = state.meals.find(meal => String(meal.name || '').toLowerCase() === text);
+  if (customMeal) return [customMeal.name];
+  return [choice];
+}
+
+function mergeShoppingListItems(...itemGroups) {
+  const map = new Map();
+  itemGroups.flat().forEach(item => {
+    if (!item?.label) return;
+    const key = String(item.label).toLowerCase();
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { label: item.label, detail: item.detail || '' });
+      return;
+    }
+    if (!prev.detail && item.detail) prev.detail = item.detail;
+  });
+  return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function buildShoppingListFromMenuDays(days) {
+  const recipeBucket = [];
+  const counts = new Map();
+  days.forEach(day => {
+    (day.meals || []).forEach(line => {
+      const entry = parseWeeklyMenuLine(line);
+      if (entry.type !== 'meal') return;
+      if (edamamRecipeCache[entry.choice]) {
+        recipeBucket.push(edamamRecipeCache[entry.choice]);
+        return;
+      }
+      inferredIngredientsForMeal(entry.choice).forEach(item => {
+        const key = item.toLowerCase();
+        counts.set(key, { label: item, count: (counts.get(key)?.count || 0) + 1 });
+      });
+    });
+  });
+  const heuristicItems = Array.from(counts.values())
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map(item => ({
+      label: item.label,
+      detail: `${item.count} meal${item.count === 1 ? '' : 's'}`
+    }));
+  return mergeShoppingListItems(buildShoppingList(recipeBucket), heuristicItems);
+}
+
+async function persistShoppingList(items, generatedBy = 'manual') {
+  const shoppingMeta = { updated: todayISO(), generated_by: generatedBy };
+  const shoppingBody = items.length
+    ? shoppingListToMarkdown(items, generatedBy)
+    : '# Shopping list\n\nNo shopping list items were generated.';
+  await writeFile(`${BASE}/Shopping List.md`, markdown(shoppingMeta, shoppingBody));
+  await writeFile(`${BASE}/Shopping Lists/${todayISO()}.md`, markdown(shoppingMeta, shoppingBody));
+}
+
+function buildWeeklyMenuDraft(days) {
+  return days.map(day => ({
+    day: day.day,
+    note: ((day.notes || []).find(note => /^prep note:/i.test(note)) || '').replace(/^prep note:\s*/i, ''),
+    meals: (day.meals || []).map(line => {
+      const parsed = parseWeeklyMenuLine(line);
+      return {
+        label: parsed.label,
+        choice: parsed.choice,
+        options: mealOptionsForLabel(state.profile || defaults, parsed.label, parsed.choice),
+        loading: false
+      };
+    })
+  }));
+}
+
+function updateWeeklyMenuChoice(dayIndex, mealIndex, value) {
+  weeklyMenuDraft[dayIndex].meals[mealIndex].choice = value;
+}
+
+function updateWeeklyMenuNote(dayIndex, value) {
+  weeklyMenuDraft[dayIndex].note = value;
+}
+
+function recipeSearchUrlForMeal(choice, label, profile) {
+  const cfg = readEdamamSettings();
+  const base = new URL('https://api.edamam.com/api/recipes/v2');
+  const mealType = label.toLowerCase().startsWith('snack') ? 'snack' : label.toLowerCase();
+  const query = choice.replace(/\s+-\s+quick build|\s+-\s+grab-and-go style|\s+-\s+easy cleanup|\s+-\s+family portion|\s+-\s+family table version/gi, '').trim();
+  base.searchParams.set('type', 'public');
+  base.searchParams.set('app_id', cfg.appId);
+  base.searchParams.set('app_key', cfg.appKey);
+  base.searchParams.set('q', query);
+  base.searchParams.set('mealType', mealType === 'snack' ? 'snack' : mealType);
+  base.searchParams.set('imageSize', 'SMALL');
+  ['label', 'uri', 'url', 'source', 'ingredients', 'ingredientLines', 'calories', 'totalNutrients'].forEach(field => {
+    base.searchParams.append('field', field);
+  });
+  inferredHealthLabels(profile || defaults).forEach(labelValue => {
+    base.searchParams.append('health', labelValue.toLowerCase());
+  });
+  return base.toString();
+}
+
+async function fetchEdamamMealOptions(dayIndex, mealIndex) {
+  const cfg = readEdamamSettings();
+  if (!cfg.appId || !cfg.appKey || cfg.mode === 'local') {
+    toast('Enable Edamam in Config.md to load live replacements.', 'error');
+    return;
+  }
+  const meal = weeklyMenuDraft[dayIndex]?.meals?.[mealIndex];
+  if (!meal) return;
+  meal.loading = true;
+  renderWeeklyMenu();
+  try {
+    const response = await fetch(recipeSearchUrlForMeal(meal.choice, meal.label, state.profile), {
+      headers: {
+        'Accept': 'application/json',
+        'Edamam-Account-User': cfg.userId
+      }
+    });
+    if (!response.ok) throw new Error(`Edamam recipe search failed with ${response.status}`);
+    const data = await response.json();
+    const options = [];
+    (data.hits || []).forEach(hit => {
+      const recipe = normalizeRecipe(hit.recipe, meal.choice);
+      if (!recipe?.label) return;
+      edamamRecipeCache[recipe.label] = recipe;
+      options.push(recipe.label);
+    });
+    meal.options = Array.from(new Set([meal.choice, ...meal.options, ...options]));
+    toast(options.length ? 'Loaded Edamam meal options.' : 'No additional Edamam options found.');
+  } catch (error) {
+    console.error(error);
+    toast('Could not load Edamam replacements for this meal.', 'error');
+  } finally {
+    meal.loading = false;
+    renderWeeklyMenu();
+  }
+}
+
 function startWeeklyMenuEdit() {
   if (!state.weeklyMenu.length) return;
   isEditingWeeklyMenu = true;
-  document.getElementById('weeklyMenuEditor').value = weeklyMenuToMarkdown(state.weeklyMenu);
+  weeklyMenuDraft = buildWeeklyMenuDraft(state.weeklyMenu);
   renderWeeklyMenu();
 }
 
 function cancelWeeklyMenuEdit() {
   isEditingWeeklyMenu = false;
+  weeklyMenuDraft = [];
   renderWeeklyMenu();
 }
 
 async function saveWeeklyMenuEdits() {
   if (!storage) return toast('Connect a vault folder first.', 'error');
-  const body = document.getElementById('weeklyMenuEditor').value.trim();
-  const parsed = readWeeklyMenuFromBody(body);
-  if (!parsed.length) return toast('Add at least one day with meal entries before saving.', 'error');
+  const days = weeklyMenuDraft.map(day => {
+    const meals = day.meals.map((meal, mealIndex) => {
+      const label = meal.label || `Meal ${mealIndex + 1}`;
+      const choice = meal.choice.trim();
+      const shares = calorieShares(state.profile?.mealsPerDay || 4);
+      const totalMeals = Math.max(1, Number(state.profile?.mealsPerDay || 4));
+      const calories = state.profile?.caloriesTarget ? roundTo(state.profile.caloriesTarget * (shares[mealIndex] || shares[shares.length - 1] || 0.25), 25) : 0;
+      const protein = state.profile?.proteinTarget ? roundTo(state.profile.proteinTarget / totalMeals, 5) : 0;
+      return `${label}: ${choice}${calories ? ` - about ${calories} kcal and ${protein} g protein` : ''}`;
+    });
+    return {
+      day: day.day || 'Day',
+      meals,
+      notes: day.note ? [`Prep note: ${day.note}`] : []
+    };
+  }).filter(day => day.meals.length);
+  if (!days.length) return toast('Add at least one day with meal entries before saving.', 'error');
   const meta = {
     updated: todayISO(),
     meals_per_day: state.profile?.mealsPerDay || '',
     generated_by: 'manual'
   };
+  const body = weeklyMenuToMarkdown(days, 'manual');
   await writeFile(`${BASE}/Weekly Menu.md`, markdown(meta, body));
   await writeFile(`${BASE}/Menus/${todayISO()}.md`, markdown(meta, body));
-  state.weeklyMenu = parsed;
-  state.shoppingList = [];
-  await writeFile(`${BASE}/Shopping List.md`, markdown({ updated: todayISO(), generated_by: 'manual' }, '# Shopping list\n\nWeekly menu was edited manually. Build a fresh Edamam menu to regenerate the live shopping list.'));
+  state.weeklyMenu = days;
+  state.shoppingList = buildShoppingListFromMenuDays(days);
+  await persistShoppingList(state.shoppingList, 'manual');
   isEditingWeeklyMenu = false;
+  weeklyMenuDraft = [];
   renderWeeklyMenu();
   renderShoppingList();
   toast('Weekly menu edits saved.');
+}
+
+async function buildShoppingListFromCurrentMenu() {
+  if (!storage) return toast('Connect a vault folder first.', 'error');
+  if (!state.weeklyMenu.length) return toast('Build a menu first.', 'error');
+  state.shoppingList = buildShoppingListFromMenuDays(state.weeklyMenu);
+  await persistShoppingList(state.shoppingList, 'manual');
+  renderShoppingList();
+  toast('Shopping list built from the current menu.');
 }
 
 async function buildPlan() {
@@ -1923,15 +2150,11 @@ async function buildPlan() {
   const menuBody = weeklyMenuToMarkdown(menuDays, generatedBy);
   await writeFile(`${BASE}/Weekly Menu.md`, markdown(menuMeta, menuBody));
   await writeFile(`${BASE}/Menus/${todayISO()}.md`, markdown(menuMeta, menuBody));
-  if (state.shoppingList.length) {
-    const shoppingMeta = { updated: todayISO(), generated_by: generatedBy };
-    const shoppingBody = shoppingListToMarkdown(state.shoppingList, generatedBy);
-    await writeFile(`${BASE}/Shopping List.md`, markdown(shoppingMeta, shoppingBody));
-    await writeFile(`${BASE}/Shopping Lists/${todayISO()}.md`, markdown(shoppingMeta, shoppingBody));
-  } else {
-    await writeFile(`${BASE}/Shopping List.md`, markdown({ updated: todayISO(), generated_by: generatedBy }, '# Shopping list\n\nNo live shopping list was generated for this menu.'));
-  }
   state.weeklyMenu = menuDays;
+  if (!state.shoppingList.length) {
+    state.shoppingList = buildShoppingListFromMenuDays(menuDays);
+  }
+  await persistShoppingList(state.shoppingList, generatedBy);
   renderProfileShell();
   renderTargets();
   renderStats();
@@ -1950,7 +2173,12 @@ function readWeeklyMenuFromBody(body) {
       return;
     }
     if (!current || !line.trim()) return;
-    if (line.startsWith('- ')) current.meals.push(line.slice(2).trim());
+    if (line.startsWith('- ')) {
+      const content = line.slice(2).trim();
+      const parsed = parseWeeklyMenuLine(content);
+      if (parsed.type === 'meal') current.meals.push(content);
+      else current.notes.push(parsed.text);
+    }
   });
   return days;
 }
@@ -2014,12 +2242,14 @@ function renderWeeklyMenu() {
   const target = document.getElementById('weeklyMenu');
   const actions = document.getElementById('weeklyMenuActions');
   const editorWrap = document.getElementById('weeklyMenuEditorWrap');
+  const editorGrid = document.getElementById('weeklyMenuEditorGrid');
   const editBtn = document.getElementById('editWeeklyMenuBtn');
   const saveBtn = document.getElementById('saveWeeklyMenuBtn');
   const cancelBtn = document.getElementById('cancelWeeklyMenuBtn');
   if (!state.weeklyMenu.length) {
     actions.style.display = 'none';
     editorWrap.style.display = 'none';
+    editorGrid.innerHTML = '';
     target.innerHTML = `<div class="empty">Build a plan to generate a 7-day menu.</div>`;
     return;
   }
@@ -2028,11 +2258,45 @@ function renderWeeklyMenu() {
   editBtn.style.display = isEditingWeeklyMenu ? 'none' : '';
   saveBtn.style.display = isEditingWeeklyMenu ? '' : 'none';
   cancelBtn.style.display = isEditingWeeklyMenu ? '' : 'none';
+  if (isEditingWeeklyMenu) {
+    const profile = state.profile || defaults;
+    editorGrid.innerHTML = weeklyMenuDraft.map((day, dayIndex) => {
+      return `
+        <div class="history-item" data-menu-day="${dayIndex}" data-day-name="${escapeHtml(day.day)}">
+          <div style="width:100%;">
+            <div class="history-title">${escapeHtml(day.day)}</div>
+            <div class="detail-lines" style="margin-top:10px;">
+              ${day.meals.map((entry, mealIndex) => {
+                const options = entry.options && entry.options.length ? entry.options : mealOptionsForLabel(profile, entry.label, entry.choice);
+                return `
+                  <div class="field" style="margin-bottom:0;">
+                    <label class="label">${escapeHtml(entry.label)}</label>
+                    <div class="actions" style="align-items:flex-end;">
+                      <select class="select" data-meal-label="${escapeHtml(entry.label)}" onchange="updateWeeklyMenuChoice(${dayIndex}, ${mealIndex}, this.value)">
+                      ${options.map(option => `<option value="${escapeHtml(option)}"${option === entry.choice ? ' selected' : ''}>${escapeHtml(option)}</option>`).join('')}
+                      </select>
+                      <button type="button" class="btn btn-secondary" onclick="fetchEdamamMealOptions(${dayIndex}, ${mealIndex})">${entry.loading ? 'loading...' : 'more options'}</button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+              <div class="field" style="margin-bottom:0;">
+                <label class="label">prep note</label>
+                <input class="input" data-note value="${escapeHtml(day.note || '')}" placeholder="Batch-cook, leftovers, fast prep" oninput="updateWeeklyMenuNote(${dayIndex}, this.value)">
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } else {
+    editorGrid.innerHTML = '';
+  }
   target.innerHTML = state.weeklyMenu.map(day => `
     <div class="history-item">
       <div>
         <div class="history-title">${escapeHtml(day.day)}</div>
-        <div class="detail-lines">${day.meals.map(line => `<div>${escapeHtml(line)}</div>`).join('')}</div>
+        <div class="detail-lines">${day.meals.map(line => `<div>${escapeHtml(line)}</div>`).join('')}${(day.notes || []).map(note => `<div>${escapeHtml(note)}</div>`).join('')}</div>
       </div>
     </div>
   `).join('');
@@ -2040,9 +2304,10 @@ function renderWeeklyMenu() {
 
 function renderShoppingList() {
   const target = document.getElementById('shoppingList');
+  const actions = document.getElementById('shoppingListActions');
+  actions.style.display = state.weeklyMenu.length ? '' : 'none';
   if (!state.shoppingList.length) {
-    const cfg = readEdamamSettings();
-    target.innerHTML = `<div class="empty">${cfg.mode === 'local' ? 'Switch menu source to Edamam to generate a live shopping list.' : 'Build a fresh Edamam menu to generate a live shopping list.'}</div>`;
+    target.innerHTML = `<div class="empty">Build the shopping list from the current weekly menu.</div>`;
     return;
   }
   target.innerHTML = state.shoppingList.map(item => `
