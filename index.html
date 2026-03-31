@@ -524,6 +524,15 @@ body {
     <section class="section">
       <div class="eyebrow">weekly menu</div>
       <div class="history-list" id="weeklyMenu"></div>
+      <div class="actions" id="weeklyMenuActions" style="display:none; margin-top:14px;">
+        <button class="btn btn-secondary" id="editWeeklyMenuBtn">edit meal choices</button>
+        <button class="btn btn-secondary" id="saveWeeklyMenuBtn" style="display:none;">save menu edits</button>
+        <button class="btn btn-secondary" id="cancelWeeklyMenuBtn" style="display:none;">cancel</button>
+      </div>
+      <div class="field" id="weeklyMenuEditorWrap" style="display:none; margin-top:14px;">
+        <label class="label" for="weeklyMenuEditor">weekly menu markdown</label>
+        <textarea class="textarea" id="weeklyMenuEditor" placeholder="# Weekly menu"></textarea>
+      </div>
     </section>
 
     <section class="section">
@@ -898,6 +907,7 @@ let storage = null;
 let state = { profile: null, history: [], meals: [], weeklyMenu: [], shoppingList: [] };
 let edamamConfig = defaultEdamamConfig();
 let isEditingProfile = false;
+let isEditingWeeklyMenu = false;
 let toastTimer = null;
 
 const defaults = {
@@ -932,6 +942,9 @@ document.getElementById('saveDayBtn').addEventListener('click', saveDay);
 document.getElementById('saveMealBtn').addEventListener('click', saveMeal);
 document.getElementById('reloadEdamamBtn').addEventListener('click', reloadEdamamConfig);
 document.getElementById('editProfileBtn').addEventListener('click', startProfileEdit);
+document.getElementById('editWeeklyMenuBtn').addEventListener('click', startWeeklyMenuEdit);
+document.getElementById('cancelWeeklyMenuBtn').addEventListener('click', cancelWeeklyMenuEdit);
+document.getElementById('saveWeeklyMenuBtn').addEventListener('click', saveWeeklyMenuEdits);
 document.getElementById('dayDate').value = todayISO();
 loadProfileIntoForm(defaults);
 refreshEdamamStatus();
@@ -1069,6 +1082,7 @@ async function signOutApp() {
   state = { profile: null, history: [], meals: [], weeklyMenu: [], shoppingList: [] };
   edamamConfig = defaultEdamamConfig();
   isEditingProfile = false;
+  isEditingWeeklyMenu = false;
   loadProfileIntoForm(defaults);
   refreshEdamamStatus();
   renderProfileShell();
@@ -1094,6 +1108,7 @@ async function loadAll() {
   state.meals = await readMeals();
   state.history = await readHistory();
   isEditingProfile = !(state.profile && state.profile.caloriesTarget);
+  isEditingWeeklyMenu = false;
   loadProfileIntoForm(state.profile);
   renderProfileShell();
   renderTargets();
@@ -1820,12 +1835,46 @@ function shoppingListToMarkdown(items, generatedBy = 'edamam') {
   return rows.join('\n');
 }
 
+function startWeeklyMenuEdit() {
+  if (!state.weeklyMenu.length) return;
+  isEditingWeeklyMenu = true;
+  document.getElementById('weeklyMenuEditor').value = weeklyMenuToMarkdown(state.weeklyMenu);
+  renderWeeklyMenu();
+}
+
+function cancelWeeklyMenuEdit() {
+  isEditingWeeklyMenu = false;
+  renderWeeklyMenu();
+}
+
+async function saveWeeklyMenuEdits() {
+  if (!storage) return toast('Connect a vault folder first.', 'error');
+  const body = document.getElementById('weeklyMenuEditor').value.trim();
+  const parsed = readWeeklyMenuFromBody(body);
+  if (!parsed.length) return toast('Add at least one day with meal entries before saving.', 'error');
+  const meta = {
+    updated: todayISO(),
+    meals_per_day: state.profile?.mealsPerDay || '',
+    generated_by: 'manual'
+  };
+  await writeFile(`${BASE}/Weekly Menu.md`, markdown(meta, body));
+  await writeFile(`${BASE}/Menus/${todayISO()}.md`, markdown(meta, body));
+  state.weeklyMenu = parsed;
+  state.shoppingList = [];
+  await writeFile(`${BASE}/Shopping List.md`, markdown({ updated: todayISO(), generated_by: 'manual' }, '# Shopping list\n\nWeekly menu was edited manually. Build a fresh Edamam menu to regenerate the live shopping list.'));
+  isEditingWeeklyMenu = false;
+  renderWeeklyMenu();
+  renderShoppingList();
+  toast('Weekly menu edits saved.');
+}
+
 async function buildPlan() {
   if (!storage) return toast('Connect a vault folder first.', 'error');
   const profile = collectProfile();
   Object.assign(profile, targets(profile));
   state.profile = profile;
   isEditingProfile = false;
+  isEditingWeeklyMenu = false;
   let generatedBy = 'local';
   let menuDays = [];
   state.shoppingList = [];
@@ -1963,10 +2012,22 @@ function renderTargets() {
 
 function renderWeeklyMenu() {
   const target = document.getElementById('weeklyMenu');
+  const actions = document.getElementById('weeklyMenuActions');
+  const editorWrap = document.getElementById('weeklyMenuEditorWrap');
+  const editBtn = document.getElementById('editWeeklyMenuBtn');
+  const saveBtn = document.getElementById('saveWeeklyMenuBtn');
+  const cancelBtn = document.getElementById('cancelWeeklyMenuBtn');
   if (!state.weeklyMenu.length) {
+    actions.style.display = 'none';
+    editorWrap.style.display = 'none';
     target.innerHTML = `<div class="empty">Build a plan to generate a 7-day menu.</div>`;
     return;
   }
+  actions.style.display = '';
+  editorWrap.style.display = isEditingWeeklyMenu ? '' : 'none';
+  editBtn.style.display = isEditingWeeklyMenu ? 'none' : '';
+  saveBtn.style.display = isEditingWeeklyMenu ? '' : 'none';
+  cancelBtn.style.display = isEditingWeeklyMenu ? '' : 'none';
   target.innerHTML = state.weeklyMenu.map(day => `
     <div class="history-item">
       <div>
