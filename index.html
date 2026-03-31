@@ -430,7 +430,16 @@ body {
 <div id="appShell" style="display:none;">
 <div class="layout">
   <div>
-    <section class="section">
+    <section class="section" id="profileSummarySection" style="display:none;">
+      <div class="eyebrow">profile ready</div>
+      <div class="copy">The Trainer already has a saved profile and plan baseline for this vault.</div>
+      <div class="history-list" id="profileSummary"></div>
+      <div class="actions" style="margin-top:14px;">
+        <button class="btn btn-secondary" id="editProfileBtn">edit profile</button>
+      </div>
+    </section>
+
+    <section class="section" id="profileBuilderSection">
       <div class="eyebrow">profile builder</div>
       <div class="copy">This first pass creates a practical baseline: calories, protein, step goal, a weekly lifting split, and a meal cadence the user can edit directly in markdown.</div>
       <div class="field-grid">
@@ -501,17 +510,15 @@ body {
       <div class="history-list" id="targetList"></div>
     </section>
 
-    <section class="section">
+    <section class="section" id="plannerConfigSection">
       <div class="eyebrow">edamam planner</div>
-      <div class="copy">Use Edamam for unique weekly menus and a live shopping list. Configure the shared app credentials in <code>References/Trainer/Config.md</code>; the end user does not need their own Edamam account.</div>
-      <div class="callout">Config fields: <code>edamam_app_id</code>, <code>edamam_app_key</code>, <code>edamam_user_id</code>, and <code>edamam_mode</code>.</div>
+      <div class="copy">To enable live weekly menus and shopping lists, add the shared Edamam app settings to <code>References/Trainer/Config.md</code>, then reload the planner config here.</div>
       <div class="actions">
         <button class="btn btn-secondary" id="reloadEdamamBtn">reload planner config</button>
       </div>
       <div class="detail-lines">
         <div id="edamamStatus">Edamam is not configured yet.</div>
       </div>
-      <div id="edamam-badge" data-color="white" style="margin-top:14px;"></div>
     </section>
 
     <section class="section">
@@ -890,6 +897,7 @@ const STEPS_PER_MILE = 2000;
 let storage = null;
 let state = { profile: null, history: [], meals: [], weeklyMenu: [], shoppingList: [] };
 let edamamConfig = defaultEdamamConfig();
+let isEditingProfile = false;
 let toastTimer = null;
 
 const defaults = {
@@ -923,9 +931,11 @@ document.getElementById('buildBtn').addEventListener('click', buildPlan);
 document.getElementById('saveDayBtn').addEventListener('click', saveDay);
 document.getElementById('saveMealBtn').addEventListener('click', saveMeal);
 document.getElementById('reloadEdamamBtn').addEventListener('click', reloadEdamamConfig);
+document.getElementById('editProfileBtn').addEventListener('click', startProfileEdit);
 document.getElementById('dayDate').value = todayISO();
 loadProfileIntoForm(defaults);
 refreshEdamamStatus();
+renderProfileShell();
 renderTargets();
 renderStats();
 renderWeeklyMenu();
@@ -1058,8 +1068,10 @@ async function signOutApp() {
   storage = null;
   state = { profile: null, history: [], meals: [], weeklyMenu: [], shoppingList: [] };
   edamamConfig = defaultEdamamConfig();
+  isEditingProfile = false;
   loadProfileIntoForm(defaults);
   refreshEdamamStatus();
+  renderProfileShell();
   renderTargets();
   renderStats();
   renderWeeklyMenu();
@@ -1081,7 +1093,9 @@ async function loadAll() {
   state.shoppingList = await readShoppingList();
   state.meals = await readMeals();
   state.history = await readHistory();
+  isEditingProfile = !(state.profile && state.profile.caloriesTarget);
   loadProfileIntoForm(state.profile);
+  renderProfileShell();
   renderTargets();
   renderStats();
   renderWeeklyMenu();
@@ -1270,9 +1284,44 @@ function readEdamamSettings() {
   return { ...edamamConfig };
 }
 
+function hasProfilePlan() {
+  return Boolean(state.profile && state.profile.caloriesTarget);
+}
+
+function hasEdamamConfig() {
+  const cfg = readEdamamSettings();
+  return Boolean(cfg.appId && cfg.appKey);
+}
+
+function renderProfileShell() {
+  const builder = document.getElementById('profileBuilderSection');
+  const summary = document.getElementById('profileSummarySection');
+  const summaryTarget = document.getElementById('profileSummary');
+  const planner = document.getElementById('plannerConfigSection');
+  const hasProfile = hasProfilePlan();
+  builder.style.display = hasProfile && !isEditingProfile ? 'none' : '';
+  summary.style.display = hasProfile && !isEditingProfile ? '' : 'none';
+  planner.style.display = hasEdamamConfig() ? 'none' : '';
+  if (!hasProfile || isEditingProfile) {
+    summaryTarget.innerHTML = '';
+    return;
+  }
+  const p = state.profile;
+  summaryTarget.innerHTML = `
+    <div class="history-item"><div><div class="history-title">${escapeHtml(p.goal.replace(/-/g, ' '))}</div><div class="history-sub">${fmt(p.caloriesTarget)} calories, ${fmt(p.proteinTarget)}g protein, ${fmt(p.stepGoal)} steps</div></div></div>
+    <div class="history-item"><div><div class="history-title">${escapeHtml(`${p.weight} lb to ${p.targetWeight} lb`)}</div><div class="history-sub">${p.trainingDays} training days, ${p.mealsPerDay} meals, ${escapeHtml(p.menuStyle)}</div></div></div>
+  `;
+}
+
+function startProfileEdit() {
+  isEditingProfile = true;
+  renderProfileShell();
+}
+
 async function reloadEdamamConfig() {
   if (!storage) return toast('Connect a vault folder first.', 'error');
   await loadEdamamConfig();
+  renderProfileShell();
   toast('Planner config reloaded from Config.md.');
 }
 
@@ -1776,6 +1825,7 @@ async function buildPlan() {
   const profile = collectProfile();
   Object.assign(profile, targets(profile));
   state.profile = profile;
+  isEditingProfile = false;
   let generatedBy = 'local';
   let menuDays = [];
   state.shoppingList = [];
@@ -1833,6 +1883,7 @@ async function buildPlan() {
     await writeFile(`${BASE}/Shopping List.md`, markdown({ updated: todayISO(), generated_by: generatedBy }, '# Shopping list\n\nNo live shopping list was generated for this menu.'));
   }
   state.weeklyMenu = menuDays;
+  renderProfileShell();
   renderTargets();
   renderStats();
   renderWeeklyMenu();
