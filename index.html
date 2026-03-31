@@ -343,7 +343,7 @@ body {
 <body>
 <header class="header">
   <div class="header-left">
-    <a class="back-link" href="https://www.stoult.com/workshop/">← return to the workshop</a>
+    <a class="back-link" href="https://www.stoult.com/workshop/">&larr; return to the workshop</a>
     <div class="wordmark">the <em>trainer</em></div>
   </div>
   <div class="header-right">
@@ -378,7 +378,7 @@ body {
     <div class="auth-option">
       <div class="auth-option-label">this device only</div>
       <div class="auth-option-title">Local folder</div>
-      <div class="auth-option-desc">Point directly to your vault folder on this computer. Fast, no account needed — desktop only.</div>
+      <div class="auth-option-desc">Point directly to your vault folder on this computer. Fast, no account needed &mdash; desktop only.</div>
       <button class="btn btn-primary" id="connectBtn">pick folder</button>
     </div>
     <div class="auth-option" id="googleOption">
@@ -414,9 +414,10 @@ body {
         <div class="field"><label class="label" for="goal">goal</label><select class="select" id="goal"><option value="lose-fat">lose fat</option><option value="maintain">maintain</option><option value="gain-muscle">gain muscle</option></select></div>
         <div class="field"><label class="label" for="sex">sex for estimate</label><select class="select" id="sex"><option value="female">female</option><option value="male">male</option><option value="other">other</option></select></div>
         <div class="field"><label class="label" for="age">age</label><input class="input" id="age" type="number" min="18" max="99"></div>
-        <div class="field"><label class="label" for="height">height cm</label><input class="input" id="height" type="number" min="120" max="240"></div>
-        <div class="field"><label class="label" for="weight">current weight kg</label><input class="input" id="weight" type="number" min="35" max="300" step="0.1"></div>
-        <div class="field"><label class="label" for="targetWeight">target weight kg</label><input class="input" id="targetWeight" type="number" min="35" max="300" step="0.1"></div>
+        <div class="field"><label class="label" for="heightFeet">height feet</label><input class="input" id="heightFeet" type="number" min="4" max="7"></div>
+        <div class="field"><label class="label" for="heightInches">height inches</label><input class="input" id="heightInches" type="number" min="0" max="11"></div>
+        <div class="field"><label class="label" for="weight">current weight lb</label><input class="input" id="weight" type="number" min="80" max="700" step="1"></div>
+        <div class="field"><label class="label" for="targetWeight">target weight lb</label><input class="input" id="targetWeight" type="number" min="80" max="700" step="1"></div>
         <div class="field"><label class="label" for="activity">activity level</label><select class="select" id="activity"><option value="sedentary">sedentary</option><option value="light">light</option><option value="moderate">moderate</option><option value="active">active</option></select></div>
         <div class="field"><label class="label" for="trainingDays">training days per week</label><input class="input" id="trainingDays" type="number" min="2" max="6"></div>
         <div class="field"><label class="label" for="sessionMinutes">session minutes</label><input class="input" id="sessionMinutes" type="number" min="20" max="120" step="5"></div>
@@ -436,6 +437,7 @@ body {
       <div class="field-grid">
         <div class="field"><label class="label" for="dayDate">date</label><input class="input" id="dayDate" type="date"></div>
         <div class="field"><label class="label" for="steps">steps</label><input class="input" id="steps" type="number" min="0"></div>
+        <div class="field"><label class="label" for="distanceMiles">distance miles</label><input class="input" id="distanceMiles" type="number" min="0" step="0.1"></div>
         <div class="field"><label class="label" for="calories">calories</label><input class="input" id="calories" type="number" min="0"></div>
         <div class="field"><label class="label" for="protein">protein g</label><input class="input" id="protein" type="number" min="0"></div>
         <div class="field"><label class="label" for="water">water oz</label><input class="input" id="water" type="number" min="0"></div>
@@ -455,8 +457,8 @@ body {
     </section>
 
     <section class="section">
-      <div class="eyebrow">fitness sync note</div>
-      <div class="callout">Google Fit is not a safe long-term integration target for a new web-first app. The Trainer therefore logs steps in markdown today and is designed so a future Android companion could write daily totals back into the same vault.</div>
+      <div class="eyebrow">markdown only</div>
+      <div class="callout">This version of the Trainer stays entirely in markdown. Profile data, plans, steps, distance, workouts, and daily notes all come from the .md files in your vault.</div>
     </section>
 
     <section class="section">
@@ -806,6 +808,9 @@ const STOULT = (() => {
 const GOOGLE_CLIENT_ID = '829248142619-hvklu048j23gft4m0d5jeg8l1hjv2lid.apps.googleusercontent.com';
 const BASE = 'References/Trainer';
 const DRIVE_ROOT_KEY = 'stoult_drive_root';
+const CM_PER_INCH = 2.54;
+const KG_PER_LB = 0.45359237;
+const STEPS_PER_MILE = 2000;
 let storage = null;
 let state = { profile: null, history: [] };
 let toastTimer = null;
@@ -814,9 +819,10 @@ const defaults = {
   goal: 'lose-fat',
   sex: 'female',
   age: 35,
-  height: 168,
-  weight: 82,
-  targetWeight: 74,
+  heightFeet: 5,
+  heightInches: 6,
+  weight: 181,
+  targetWeight: 163,
   activity: 'light',
   trainingDays: 4,
   sessionMinutes: 45,
@@ -1007,13 +1013,22 @@ async function readProfile() {
   const raw = await readFile(`${BASE}/Profile.md`);
   if (!raw) return { ...defaults, caloriesTarget: '', proteinTarget: '', stepGoal: '', waterGoal: '' };
   const { meta, body } = parseFrontmatter(raw);
+  const legacyHeightCm = Number(meta.height_cm || 0);
+  const legacyWeightKg = Number(meta.weight_kg || 0);
+  const legacyTargetWeightKg = Number(meta.target_weight_kg || 0);
+  const height = normalizeHeight(
+    Number(meta.height_feet || 0),
+    Number(meta.height_inches || 0),
+    legacyHeightCm || heightToCm(defaults.heightFeet, defaults.heightInches)
+  );
   return {
     goal: meta.goal || defaults.goal,
     sex: meta.sex || defaults.sex,
     age: Number(meta.age || defaults.age),
-    height: Number(meta.height_cm || defaults.height),
-    weight: Number(meta.weight_kg || defaults.weight),
-    targetWeight: Number(meta.target_weight_kg || defaults.targetWeight),
+    heightFeet: height.feet,
+    heightInches: height.inches,
+    weight: Number(meta.weight_lb || 0) || Math.round(kgToLb(legacyWeightKg || defaults.weight * KG_PER_LB)),
+    targetWeight: Number(meta.target_weight_lb || 0) || Math.round(kgToLb(legacyTargetWeightKg || defaults.targetWeight * KG_PER_LB)),
     activity: meta.activity || defaults.activity,
     trainingDays: Number(meta.training_days || defaults.trainingDays),
     sessionMinutes: Number(meta.session_minutes || defaults.sessionMinutes),
@@ -1038,6 +1053,7 @@ async function readHistory() {
     rows.push({
       date: file.name.replace(/\.md$/i, ''),
       steps: Number(meta.steps || 0),
+      distanceMiles: Number(meta.distance_miles || 0),
       calories: Number(meta.calories || 0),
       protein: Number(meta.protein || 0),
       workout: meta.workout || ''
@@ -1050,7 +1066,8 @@ function loadProfileIntoForm(p) {
   set('goal', p.goal);
   set('sex', p.sex);
   set('age', p.age);
-  set('height', p.height);
+  set('heightFeet', p.heightFeet);
+  set('heightInches', p.heightInches);
   set('weight', p.weight);
   set('targetWeight', p.targetWeight);
   set('activity', p.activity);
@@ -1069,12 +1086,35 @@ function num(id, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function lbToKg(lb) { return lb * KG_PER_LB; }
+function kgToLb(kg) { return kg / KG_PER_LB; }
+function heightToCm(feet, inches) { return ((feet * 12) + inches) * CM_PER_INCH; }
+function stepsToMiles(steps) { return steps / STEPS_PER_MILE; }
+function milesText(miles) { return `${trimNumber(miles, 1)} mi`; }
+function trimNumber(value, digits = 1) {
+  return Number(value || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits
+  });
+}
+function normalizeHeight(feet, inches, fallbackCm = 0) {
+  let totalInches = Math.round((Number(feet) || 0) * 12 + (Number(inches) || 0));
+  if (totalInches <= 0 && fallbackCm > 0) totalInches = Math.round(fallbackCm / CM_PER_INCH);
+  if (totalInches <= 0) totalInches = defaults.heightFeet * 12 + defaults.heightInches;
+  return {
+    feet: Math.max(4, Math.floor(totalInches / 12)),
+    inches: Math.max(0, totalInches % 12)
+  };
+}
+
 function collectProfile() {
+  const height = normalizeHeight(num('heightFeet', defaults.heightFeet), num('heightInches', defaults.heightInches));
   return {
     goal: document.getElementById('goal').value,
     sex: document.getElementById('sex').value,
     age: num('age', defaults.age),
-    height: num('height', defaults.height),
+    heightFeet: height.feet,
+    heightInches: height.inches,
     weight: num('weight', defaults.weight),
     targetWeight: num('targetWeight', defaults.targetWeight),
     activity: document.getElementById('activity').value,
@@ -1089,8 +1129,10 @@ function collectProfile() {
 }
 
 function targets(profile) {
+  const weightKg = lbToKg(profile.weight);
+  const heightCm = heightToCm(profile.heightFeet, profile.heightInches);
   const adjust = profile.sex === 'male' ? 5 : profile.sex === 'female' ? -161 : -78;
-  const bmr = 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + adjust;
+  const bmr = 10 * weightKg + 6.25 * heightCm - 5 * profile.age + adjust;
   const mult = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725 }[profile.activity] || 1.375;
   const tdee = bmr * mult;
   const delta = { 'lose-fat': -350, maintain: 0, 'gain-muscle': 250 }[profile.goal] || 0;
@@ -1099,9 +1141,9 @@ function targets(profile) {
   if (profile.goal === 'lose-fat') steps += 1000;
   return {
     caloriesTarget: roundTo(Math.max(1400, tdee + delta), 25),
-    proteinTarget: roundTo(Math.max(100, profile.weight * proteinFactor), 5),
+    proteinTarget: roundTo(Math.max(100, weightKg * proteinFactor), 5),
     stepGoal: Math.min(13000, Math.max(6000, steps)),
-    waterGoal: roundTo(Math.max(70, profile.weight * 1.1), 4)
+    waterGoal: roundTo(Math.max(70, profile.weight * 0.5), 4)
   };
 }
 
@@ -1117,7 +1159,7 @@ function buildWorkout(profile, t) {
     '',
     `- Goal: ${profile.goal}`,
     `- Session cap: ${profile.sessionMinutes} minutes`,
-    `- Daily step floor: ${t.stepGoal}`,
+    `- Daily step floor: ${t.stepGoal} steps, about ${milesText(stepsToMiles(t.stepGoal))}`,
     ''
   ];
   for (let i = 0; i < days; i++) {
@@ -1172,9 +1214,10 @@ async function buildPlan() {
     goal: profile.goal,
     sex: profile.sex,
     age: profile.age,
-    height_cm: profile.height,
-    weight_kg: profile.weight,
-    target_weight_kg: profile.targetWeight,
+    height_feet: profile.heightFeet,
+    height_inches: profile.heightInches,
+    weight_lb: profile.weight,
+    target_weight_lb: profile.targetWeight,
     activity: profile.activity,
     training_days: profile.trainingDays,
     session_minutes: profile.sessionMinutes,
@@ -1200,6 +1243,7 @@ async function saveDay() {
   await writeFile(`${BASE}/Days/${date}.md`, markdown({
     date,
     steps: num('steps'),
+    distance_miles: num('distanceMiles'),
     calories: num('calories'),
     protein: num('protein'),
     water: num('water'),
@@ -1221,7 +1265,7 @@ function renderTargets() {
   target.innerHTML = `
     <div class="history-item"><div><div class="history-title">${p.caloriesTarget}</div><div class="history-sub">daily calories</div></div></div>
     <div class="history-item"><div><div class="history-title">${p.proteinTarget}g</div><div class="history-sub">protein target</div></div></div>
-    <div class="history-item"><div><div class="history-title">${p.stepGoal}</div><div class="history-sub">step floor</div></div></div>
+    <div class="history-item"><div><div class="history-title">${p.stepGoal}</div><div class="history-sub">step floor, about ${milesText(stepsToMiles(p.stepGoal))}</div></div></div>
     <div class="history-item"><div><div class="history-title">${p.waterGoal} oz</div><div class="history-sub">hydration target</div></div></div>
   `;
 }
@@ -1247,7 +1291,7 @@ function renderHistory() {
     <div class="history-item">
       <div>
         <div class="history-title">${day.date}</div>
-        <div class="history-sub">${fmt(day.steps)} steps, ${fmt(day.calories)} calories, ${fmt(day.protein)}g protein</div>
+        <div class="history-sub">${fmt(day.steps)} steps${day.distanceMiles ? `, ${milesText(day.distanceMiles)}` : ''}, ${fmt(day.calories)} calories, ${fmt(day.protein)}g protein</div>
         ${day.workout ? `<span class="pill">${escapeHtml(day.workout)}</span>` : ''}
       </div>
     </div>
