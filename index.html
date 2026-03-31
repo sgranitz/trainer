@@ -290,6 +290,14 @@ body {
   line-height: 1.1;
 }
 .history-sub { margin-top: 6px; }
+.detail-lines {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .pill {
   display: inline-block;
   margin-top: 8px;
@@ -352,6 +360,7 @@ body {
   .identity-pill { max-width: 100%; }
 }
 </style>
+<script src="https://developer.edamam.com/attribution/badge.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 </head>
 <body>
@@ -436,9 +445,13 @@ body {
         <div class="field"><label class="label" for="trainingDays">training days per week</label><input class="input" id="trainingDays" type="number" min="2" max="6"></div>
         <div class="field"><label class="label" for="sessionMinutes">session minutes</label><input class="input" id="sessionMinutes" type="number" min="20" max="120" step="5"></div>
         <div class="field"><label class="label" for="mealsPerDay">meals per day</label><input class="input" id="mealsPerDay" type="number" min="3" max="5"></div>
+        <div class="field"><label class="label" for="menuStyle">weekly menu style</label><select class="select" id="menuStyle"><option value="balanced">balanced staples</option><option value="quick">quick convenience</option><option value="family">family friendly</option></select></div>
+        <div class="field"><label class="label" for="prepStyle">prep approach</label><select class="select" id="prepStyle"><option value="mixed">mix of prep and fresh</option><option value="minimal">minimal cooking</option><option value="batch">batch cook ahead</option></select></div>
       </div>
       <div class="field"><label class="label" for="equipment">equipment available</label><input class="input" id="equipment" placeholder="dumbbells, bands, treadmill"></div>
       <div class="field"><label class="label" for="dietStyle">diet style</label><select class="select" id="dietStyle"><option value="high-protein">high protein omnivore</option><option value="vegetarian">vegetarian</option><option value="pescatarian">pescatarian</option></select></div>
+      <div class="field"><label class="label" for="favoriteFoods">foods they want to eat</label><input class="input" id="favoriteFoods" placeholder="tacos, salmon, greek yogurt, burrito bowls"></div>
+      <div class="field"><label class="label" for="avoidFoods">foods to avoid</label><input class="input" id="avoidFoods" placeholder="mushrooms, shrimp, spicy food"></div>
       <div class="field"><label class="label" for="preferences">preferences or constraints</label><input class="input" id="preferences" placeholder="dairy free, fast lunches, low prep"></div>
       <div class="field"><label class="label" for="profileNotes">notes</label><textarea class="textarea" id="profileNotes" placeholder="Injuries, timing issues, habits, recovery, anything the plan should respect."></textarea></div>
       <div class="actions">
@@ -457,9 +470,27 @@ body {
         <div class="field"><label class="label" for="water">water oz</label><input class="input" id="water" type="number" min="0"></div>
         <div class="field"><label class="label" for="workout">workout</label><input class="input" id="workout" placeholder="upper, walk, rest"></div>
       </div>
+      <div class="field"><label class="label" for="dayMeals">meals eaten</label><input class="input" id="dayMeals" placeholder="planned meals, off-menu meals, portions"></div>
       <div class="field"><label class="label" for="dayNotes">notes</label><textarea class="textarea" id="dayNotes" placeholder="Energy, hunger, soreness, wins, problems."></textarea></div>
       <div class="actions">
         <button class="btn btn-secondary" id="saveDayBtn">save day</button>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="eyebrow">custom meal</div>
+      <div class="copy">Save something the user actually ate, even if it is not on the weekly menu. Nutrition lookup can plug in later, but manual macros should always work.</div>
+      <div class="field-grid">
+        <div class="field"><label class="label" for="mealName">meal name</label><input class="input" id="mealName" placeholder="turkey sandwich"></div>
+        <div class="field"><label class="label" for="mealServing">serving</label><input class="input" id="mealServing" placeholder="1 sandwich"></div>
+        <div class="field"><label class="label" for="mealCalories">calories</label><input class="input" id="mealCalories" type="number" min="0"></div>
+        <div class="field"><label class="label" for="mealProtein">protein g</label><input class="input" id="mealProtein" type="number" min="0"></div>
+        <div class="field"><label class="label" for="mealCarbs">carbs g</label><input class="input" id="mealCarbs" type="number" min="0"></div>
+        <div class="field"><label class="label" for="mealFat">fat g</label><input class="input" id="mealFat" type="number" min="0"></div>
+      </div>
+      <div class="field"><label class="label" for="mealNotes">notes</label><textarea class="textarea" id="mealNotes" placeholder="Brand, ingredients, substitutions, or why this meal works for the user."></textarea></div>
+      <div class="actions">
+        <button class="btn btn-secondary" id="saveMealBtn">save custom meal</button>
       </div>
     </section>
   </div>
@@ -468,6 +499,34 @@ body {
     <section class="section">
       <div class="eyebrow">targets</div>
       <div class="history-list" id="targetList"></div>
+    </section>
+
+    <section class="section">
+      <div class="eyebrow">edamam planner</div>
+      <div class="copy">Use Edamam for unique weekly menus and a live shopping list. Configure the shared app credentials in <code>References/Trainer/Config.md</code>; the end user does not need their own Edamam account.</div>
+      <div class="callout">Config fields: <code>edamam_app_id</code>, <code>edamam_app_key</code>, <code>edamam_user_id</code>, and <code>edamam_mode</code>.</div>
+      <div class="actions">
+        <button class="btn btn-secondary" id="reloadEdamamBtn">reload planner config</button>
+      </div>
+      <div class="detail-lines">
+        <div id="edamamStatus">Edamam is not configured yet.</div>
+      </div>
+      <div id="edamam-badge" data-color="white" style="margin-top:14px;"></div>
+    </section>
+
+    <section class="section">
+      <div class="eyebrow">weekly menu</div>
+      <div class="history-list" id="weeklyMenu"></div>
+    </section>
+
+    <section class="section">
+      <div class="eyebrow">shopping list</div>
+      <div class="history-list" id="shoppingList"></div>
+    </section>
+
+    <section class="section">
+      <div class="eyebrow">saved meals</div>
+      <div class="history-list" id="mealLibrary"></div>
     </section>
 
     <section class="section">
@@ -821,11 +880,16 @@ const STOULT = (() => {
 const GOOGLE_CLIENT_ID = '829248142619-hvklu048j23gft4m0d5jeg8l1hjv2lid.apps.googleusercontent.com';
 const BASE = 'References/Trainer';
 const DRIVE_ROOT_KEY = 'stoult_drive_root';
+const EDAMAM_APP_ID_KEY = 'trainer_edamam_app_id';
+const EDAMAM_APP_KEY_KEY = 'trainer_edamam_app_key';
+const EDAMAM_USER_ID_KEY = 'trainer_edamam_user_id';
+const EDAMAM_MODE_KEY = 'trainer_edamam_mode';
 const CM_PER_INCH = 2.54;
 const KG_PER_LB = 0.45359237;
 const STEPS_PER_MILE = 2000;
 let storage = null;
-let state = { profile: null, history: [] };
+let state = { profile: null, history: [], meals: [], weeklyMenu: [], shoppingList: [] };
+let edamamConfig = defaultEdamamConfig();
 let toastTimer = null;
 
 const defaults = {
@@ -840,8 +904,12 @@ const defaults = {
   trainingDays: 4,
   sessionMinutes: 45,
   mealsPerDay: 4,
+  menuStyle: 'balanced',
+  prepStyle: 'mixed',
   equipment: 'dumbbells, bands, bodyweight',
   dietStyle: 'high-protein',
+  favoriteFoods: '',
+  avoidFoods: '',
   preferences: '',
   notes: ''
 };
@@ -853,10 +921,16 @@ document.getElementById('connectDriveBtn').addEventListener('click', confirmVaul
 document.getElementById('signOutBtn').addEventListener('click', signOutApp);
 document.getElementById('buildBtn').addEventListener('click', buildPlan);
 document.getElementById('saveDayBtn').addEventListener('click', saveDay);
+document.getElementById('saveMealBtn').addEventListener('click', saveMeal);
+document.getElementById('reloadEdamamBtn').addEventListener('click', reloadEdamamConfig);
 document.getElementById('dayDate').value = todayISO();
 loadProfileIntoForm(defaults);
+refreshEdamamStatus();
 renderTargets();
 renderStats();
+renderWeeklyMenu();
+renderShoppingList();
+renderMeals();
 renderHistory();
 init();
 
@@ -982,10 +1056,15 @@ async function signOutApp() {
   await STOULT.clearHandle();
   localStorage.removeItem(DRIVE_ROOT_KEY);
   storage = null;
-  state = { profile: null, history: [] };
+  state = { profile: null, history: [], meals: [], weeklyMenu: [], shoppingList: [] };
+  edamamConfig = defaultEdamamConfig();
   loadProfileIntoForm(defaults);
+  refreshEdamamStatus();
   renderTargets();
   renderStats();
+  renderWeeklyMenu();
+  renderShoppingList();
+  renderMeals();
   renderHistory();
   showSetupGate();
 }
@@ -993,11 +1072,21 @@ async function signOutApp() {
 async function loadAll() {
   await ensureFolder(BASE);
   await ensureFolder(`${BASE}/Days`);
+  await ensureFolder(`${BASE}/Meals`);
+  await ensureFolder(`${BASE}/Menus`);
+  await ensureFolder(`${BASE}/Shopping Lists`);
+  await loadEdamamConfig();
   state.profile = await readProfile();
+  state.weeklyMenu = await readWeeklyMenu();
+  state.shoppingList = await readShoppingList();
+  state.meals = await readMeals();
   state.history = await readHistory();
   loadProfileIntoForm(state.profile);
   renderTargets();
   renderStats();
+  renderWeeklyMenu();
+  renderShoppingList();
+  renderMeals();
   renderHistory();
   toast('Vault connected.');
 }
@@ -1046,8 +1135,12 @@ async function readProfile() {
     trainingDays: Number(meta.training_days || defaults.trainingDays),
     sessionMinutes: Number(meta.session_minutes || defaults.sessionMinutes),
     mealsPerDay: Number(meta.meals_per_day || defaults.mealsPerDay),
+    menuStyle: meta.menu_style || defaults.menuStyle,
+    prepStyle: meta.prep_style || defaults.prepStyle,
     equipment: meta.equipment || defaults.equipment,
     dietStyle: meta.diet_style || defaults.dietStyle,
+    favoriteFoods: meta.favorite_foods || defaults.favoriteFoods,
+    avoidFoods: meta.avoid_foods || defaults.avoidFoods,
     preferences: meta.preferences || defaults.preferences,
     notes: body || '',
     caloriesTarget: Number(meta.calories_target || 0),
@@ -1055,6 +1148,51 @@ async function readProfile() {
     stepGoal: Number(meta.step_goal || 0),
     waterGoal: Number(meta.water_goal || 0)
   };
+}
+
+async function readWeeklyMenu() {
+  const raw = await readFile(`${BASE}/Weekly Menu.md`);
+  if (!raw) return [];
+  const { body } = parseFrontmatter(raw);
+  return readWeeklyMenuFromBody(body);
+}
+
+async function readShoppingList() {
+  const raw = await readFile(`${BASE}/Shopping List.md`);
+  if (!raw) return [];
+  const { body } = parseFrontmatter(raw);
+  return body
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('- '))
+    .map(line => {
+      const [label, ...rest] = line.slice(2).split(' - ');
+      return {
+        label: label || '',
+        detail: rest.join(' - ') || 'see recipe details'
+      };
+    })
+    .filter(item => item.label);
+}
+
+async function readMeals() {
+  const files = storage ? await storage.listFiles(`${BASE}/Meals`) : [];
+  const rows = [];
+  for (const file of files.filter(f => f.name && f.name.endsWith('.md'))) {
+    const raw = await readFile(`${BASE}/Meals/${file.name}`);
+    const { meta, body } = parseFrontmatter(raw);
+    rows.push({
+      name: meta.name || file.name.replace(/\.md$/i, ''),
+      serving: meta.serving || '',
+      calories: Number(meta.calories || 0),
+      protein: Number(meta.protein || 0),
+      carbs: Number(meta.carbs || 0),
+      fat: Number(meta.fat || 0),
+      updated: meta.updated || '',
+      notes: body || ''
+    });
+  }
+  return rows.sort((a, b) => String(b.updated).localeCompare(String(a.updated))).slice(0, 12);
 }
 
 async function readHistory() {
@@ -1069,7 +1207,8 @@ async function readHistory() {
       distanceMiles: Number(meta.distance_miles || 0),
       calories: Number(meta.calories || 0),
       protein: Number(meta.protein || 0),
-      workout: meta.workout || ''
+      workout: meta.workout || '',
+      meals: meta.meals || ''
     });
   }
   return rows.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
@@ -1087,8 +1226,12 @@ function loadProfileIntoForm(p) {
   set('trainingDays', p.trainingDays);
   set('sessionMinutes', p.sessionMinutes);
   set('mealsPerDay', p.mealsPerDay);
+  set('menuStyle', p.menuStyle);
+  set('prepStyle', p.prepStyle);
   set('equipment', p.equipment);
   set('dietStyle', p.dietStyle);
+  set('favoriteFoods', p.favoriteFoods);
+  set('avoidFoods', p.avoidFoods);
   set('preferences', p.preferences);
   set('profileNotes', p.notes || '');
 }
@@ -1097,6 +1240,86 @@ function set(id, value) { document.getElementById(id).value = value == null ? ''
 function num(id, fallback = 0) {
   const n = Number(document.getElementById(id).value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function defaultEdamamConfig() {
+  return {
+    appId: '',
+    appKey: '',
+    userId: sanitizeEdamamUserId(`trainer.${Math.random().toString(36).slice(2, 10)}`),
+    mode: 'edamam'
+  };
+}
+
+function readLegacyEdamamSettings() {
+  const appId = localStorage.getItem(EDAMAM_APP_ID_KEY) || '';
+  const appKey = localStorage.getItem(EDAMAM_APP_KEY_KEY) || '';
+  const userId = sanitizeEdamamUserId(localStorage.getItem(EDAMAM_USER_ID_KEY) || '');
+  const mode = localStorage.getItem(EDAMAM_MODE_KEY) || 'edamam';
+  return { appId, appKey, userId, mode };
+}
+
+function clearLegacyEdamamSettings() {
+  localStorage.removeItem(EDAMAM_APP_ID_KEY);
+  localStorage.removeItem(EDAMAM_APP_KEY_KEY);
+  localStorage.removeItem(EDAMAM_USER_ID_KEY);
+  localStorage.removeItem(EDAMAM_MODE_KEY);
+}
+
+function readEdamamSettings() {
+  return { ...edamamConfig };
+}
+
+async function reloadEdamamConfig() {
+  if (!storage) return toast('Connect a vault folder first.', 'error');
+  await loadEdamamConfig();
+  toast('Planner config reloaded from Config.md.');
+}
+
+async function loadEdamamConfig() {
+  const fallback = defaultEdamamConfig();
+  try {
+    let raw = await readFile(`${BASE}/Config.md`);
+    if (!raw) {
+      const legacy = readLegacyEdamamSettings();
+      const seed = legacy.appId || legacy.appKey ? {
+        appId: legacy.appId,
+        appKey: legacy.appKey,
+        userId: legacy.userId || fallback.userId,
+        mode: legacy.mode || 'edamam'
+      } : fallback;
+      await writeFile(`${BASE}/Config.md`, markdown({
+        edamam_app_id: seed.appId,
+        edamam_app_key: seed.appKey,
+        edamam_user_id: seed.userId,
+        edamam_mode: seed.mode
+      }, 'Shared planner settings for The Trainer. Set the app credentials once, then each vault can use the same menu planner without needing its own Edamam account.\n'));
+      clearLegacyEdamamSettings();
+      edamamConfig = seed;
+      refreshEdamamStatus();
+      return;
+    }
+    const { meta } = parseFrontmatter(raw);
+    edamamConfig = {
+      appId: String(meta.edamam_app_id || '').trim(),
+      appKey: String(meta.edamam_app_key || '').trim(),
+      userId: sanitizeEdamamUserId(meta.edamam_user_id || fallback.userId),
+      mode: meta.edamam_mode === 'local' ? 'local' : 'edamam'
+    };
+    clearLegacyEdamamSettings();
+  } catch {
+    edamamConfig = fallback;
+  }
+  refreshEdamamStatus();
+}
+
+function refreshEdamamStatus() {
+  const cfg = readEdamamSettings();
+  document.getElementById('edamamStatus').textContent = cfg.appId && cfg.appKey
+    ? (cfg.mode === 'local'
+      ? `Config.md has app credentials and user id ${cfg.userId}, but local templates are currently selected.`
+      : `Config.md has app credentials and user id ${cfg.userId}. Edamam menus are enabled.`)
+    : (storage ? 'Edamam is not configured in Config.md yet.' : 'Connect a vault to load planner settings from Config.md.');
 }
 
 function lbToKg(lb) { return lb * KG_PER_LB; }
@@ -1120,6 +1343,22 @@ function normalizeHeight(feet, inches, fallbackCm = 0) {
   };
 }
 
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'meal';
+}
+
+function sanitizeEdamamUserId(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '.')
+    .replace(/^\.+|\.+$/g, '')
+    .slice(0, 30) || 'trainer.user';
+}
+
 function collectProfile() {
   const height = normalizeHeight(num('heightFeet', defaults.heightFeet), num('heightInches', defaults.heightInches));
   return {
@@ -1134,8 +1373,12 @@ function collectProfile() {
     trainingDays: num('trainingDays', defaults.trainingDays),
     sessionMinutes: num('sessionMinutes', defaults.sessionMinutes),
     mealsPerDay: num('mealsPerDay', defaults.mealsPerDay),
+    menuStyle: document.getElementById('menuStyle').value,
+    prepStyle: document.getElementById('prepStyle').value,
     equipment: document.getElementById('equipment').value.trim(),
     dietStyle: document.getElementById('dietStyle').value,
+    favoriteFoods: document.getElementById('favoriteFoods').value.trim(),
+    avoidFoods: document.getElementById('avoidFoods').value.trim(),
     preferences: document.getElementById('preferences').value.trim(),
     notes: document.getElementById('profileNotes').value.trim()
   };
@@ -1218,11 +1461,324 @@ function buildMeals(profile, t) {
   return rows.join('\n');
 }
 
+function mealLibraryFor(profile) {
+  const omnivore = {
+    breakfast: ['Greek yogurt bowl with berries and granola', 'Protein oats with banana and peanut butter', 'Egg scramble with toast and fruit', 'Cottage cheese bowl with berries and honey'],
+    lunch: ['Chicken rice bowl with vegetables', 'Turkey sandwich with fruit and yogurt', 'Taco salad with lean beef and beans', 'Rotisserie chicken wrap with slaw'],
+    dinner: ['Salmon, potatoes, and green beans', 'Chicken burrito bowl with salsa and avocado', 'Lean beef pasta with side salad', 'Sheet-pan chicken with roasted vegetables'],
+    snack: ['Protein shake and fruit', 'String cheese and apple', 'Greek yogurt cup', 'Trail mix and jerky']
+  };
+  const vegetarian = {
+    breakfast: ['Protein oats with chia and berries', 'Greek yogurt bowl with fruit and nuts', 'Egg and veggie scramble with toast', 'Cottage cheese bowl with pineapple'],
+    lunch: ['Tofu rice bowl with edamame', 'Lentil wrap with greens and hummus', 'Greek salad with chickpeas and pita', 'Black bean burrito bowl'],
+    dinner: ['Tofu stir-fry with rice', 'Lentil pasta with spinach and parmesan', 'Veggie taco bowls with beans and avocado', 'Paneer or tofu curry with rice'],
+    snack: ['Greek yogurt and fruit', 'Protein shake', 'Hummus with pita', 'Cottage cheese and berries']
+  };
+  const pescatarian = {
+    breakfast: ['Greek yogurt bowl with berries', 'Protein oats with almond butter', 'Egg scramble with toast', 'Cottage cheese bowl with fruit'],
+    lunch: ['Tuna wrap with fruit', 'Salmon rice bowl', 'Mediterranean chickpea bowl with feta', 'Shrimp taco salad'],
+    dinner: ['Salmon with potatoes and greens', 'Shrimp stir-fry with rice', 'Tuna pasta salad and vegetables', 'Fish tacos with slaw and beans'],
+    snack: ['Greek yogurt cup', 'Protein shake and banana', 'Jerky alternative and fruit', 'Cheese and crackers']
+  };
+  const base = profile.dietStyle === 'vegetarian' ? vegetarian : profile.dietStyle === 'pescatarian' ? pescatarian : omnivore;
+  if (profile.menuStyle === 'quick') {
+    return {
+      breakfast: base.breakfast.map(x => `${x} - quick build`),
+      lunch: base.lunch.map(x => `${x} - grab-and-go style`),
+      dinner: base.dinner.map(x => `${x} - easy cleanup`),
+      snack: base.snack
+    };
+  }
+  if (profile.menuStyle === 'family') {
+    return {
+      breakfast: base.breakfast.map(x => `${x} - family portion`),
+      lunch: base.lunch,
+      dinner: base.dinner.map(x => `${x} - family table version`),
+      snack: base.snack
+    };
+  }
+  return base;
+}
+
+function buildWeeklyMenu(profile, t) {
+  const pool = mealLibraryFor(profile);
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const meals = Math.max(3, Math.min(5, profile.mealsPerDay));
+  const labels = meals === 3 ? ['Breakfast', 'Lunch', 'Dinner'] : meals === 5 ? ['Breakfast', 'Lunch', 'Dinner', 'Snack 1', 'Snack 2'] : ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+  const shares = meals === 3 ? [0.3, 0.35, 0.35] : meals === 5 ? [0.18, 0.24, 0.24, 0.17, 0.17] : [0.25, 0.3, 0.3, 0.15];
+  const rows = [
+    '# Weekly menu',
+    '',
+    `- Daily calories: ${t.caloriesTarget}`,
+    `- Daily protein: ${t.proteinTarget} g`,
+    `- Menu style: ${profile.menuStyle}`,
+    `- Prep approach: ${profile.prepStyle}`,
+    profile.favoriteFoods ? `- Prioritize: ${profile.favoriteFoods}` : '',
+    profile.avoidFoods ? `- Avoid: ${profile.avoidFoods}` : '',
+    profile.preferences ? `- Constraints: ${profile.preferences}` : '',
+    ''
+  ].filter(Boolean);
+  const prepNote = profile.prepStyle === 'batch'
+    ? 'Batch-cook one protein, one starch, and one vegetable for reuse.'
+    : profile.prepStyle === 'minimal'
+      ? 'Favor assembled meals, leftovers, and low-cook options.'
+      : 'Mix two prepped staples with a few fresh meals.';
+  labels.forEach((label, idx) => {
+    if (!pool[label.toLowerCase().startsWith('snack') ? 'snack' : label.toLowerCase()]) pool[label.toLowerCase()] = pool.snack;
+  });
+  days.forEach((day, dayIndex) => {
+    rows.push(`## ${day}`);
+    labels.forEach((label, mealIndex) => {
+      const key = label.toLowerCase().startsWith('snack') ? 'snack' : label.toLowerCase();
+      const options = pool[key] || pool.snack;
+      const choice = options[(dayIndex + mealIndex) % options.length];
+      rows.push(`- ${label}: ${choice} - about ${roundTo(t.caloriesTarget * shares[mealIndex], 25)} kcal and ${roundTo(t.proteinTarget / meals, 5)} g protein`);
+    });
+    rows.push(`- Prep note: ${prepNote}`);
+    rows.push('');
+  });
+  return rows.join('\n');
+}
+
+function mealSectionLabels(mealsPerDay) {
+  const meals = Math.max(3, Math.min(5, mealsPerDay));
+  return meals === 3
+    ? ['Breakfast', 'Lunch', 'Dinner']
+    : meals === 5
+      ? ['Breakfast', 'Lunch', 'Dinner', 'Snack 1', 'Snack 2']
+      : ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+}
+
+function calorieShares(mealsPerDay) {
+  const meals = Math.max(3, Math.min(5, mealsPerDay));
+  return meals === 3 ? [0.3, 0.35, 0.35] : meals === 5 ? [0.18, 0.24, 0.24, 0.17, 0.17] : [0.25, 0.3, 0.3, 0.15];
+}
+
+function inferredHealthLabels(profile) {
+  const labels = [];
+  if (profile.dietStyle === 'vegetarian') labels.push('VEGETARIAN');
+  if (profile.dietStyle === 'pescatarian') labels.push('PESCATARIAN');
+  const text = `${profile.avoidFoods} ${profile.preferences}`.toLowerCase();
+  const maps = [
+    ['dairy', 'DAIRY_FREE'],
+    ['gluten', 'GLUTEN_FREE'],
+    ['egg', 'EGG_FREE'],
+    ['fish', 'FISH_FREE'],
+    ['shellfish', 'SHELLFISH_FREE'],
+    ['soy', 'SOY_FREE'],
+    ['peanut', 'PEANUT_FREE'],
+    ['tree nut', 'TREE_NUT_FREE'],
+    ['pork', 'PORK_FREE'],
+    ['low sugar', 'LOW_SUGAR']
+  ];
+  maps.forEach(([needle, label]) => {
+    if (text.includes(needle) && !labels.includes(label)) labels.push(label);
+  });
+  return labels;
+}
+
+function inferredCuisine(profile) {
+  const text = `${profile.favoriteFoods} ${profile.preferences}`.toLowerCase();
+  const cuisines = ['mediterranean', 'mexican', 'italian', 'asian', 'indian', 'american', 'greek', 'japanese'];
+  return cuisines.find(c => text.includes(c)) || '';
+}
+
+function buildEdamamPayload(profile, t) {
+  const labels = mealSectionLabels(profile.mealsPerDay);
+  const shares = calorieShares(profile.mealsPerDay);
+  const globalHealth = inferredHealthLabels(profile);
+  const cuisine = inferredCuisine(profile);
+  const payload = {
+    size: 7,
+    plan: {
+      fit: {
+        ENERC_KCAL: {
+          min: Math.max(1200, Math.round(t.caloriesTarget * 0.92)),
+          max: Math.round(t.caloriesTarget * 1.08)
+        },
+        PROCNT: {
+          min: Math.max(60, Math.round(t.proteinTarget * 0.7))
+        }
+      },
+      sections: {}
+    }
+  };
+  if (globalHealth.length) {
+    payload.plan.accept = { all: [{ health: globalHealth }] };
+  }
+  labels.forEach((label, index) => {
+    const sectionLabel = label.startsWith('Snack') ? `Snack ${index - 2}` : label;
+    const mealType = label.startsWith('Snack') ? 'snack' : label === 'Breakfast' ? 'breakfast' : 'lunch/dinner';
+    const section = {
+      accept: {
+        all: [
+          { meal: [mealType] }
+        ]
+      },
+      fit: {
+        ENERC_KCAL: {
+          min: Math.max(100, Math.round(t.caloriesTarget * shares[index] * 0.8)),
+          max: Math.round(t.caloriesTarget * shares[index] * 1.2)
+        }
+      }
+    };
+    if (mealType === 'breakfast') section.accept.all.unshift({ dish: ['cereals', 'bread', 'egg', 'pancake', 'drinks'] });
+    else if (mealType === 'snack') section.accept.all.unshift({ dish: ['sandwiches', 'salad', 'drinks', 'biscuits and cookies'] });
+    else section.accept.all.unshift({ dish: ['main course', 'salad', 'soup', 'sandwiches', 'pasta', 'seafood'] });
+    if (cuisine) section.accept.all.push({ cuisine: [cuisine] });
+    payload.plan.sections[sectionLabel] = section;
+  });
+  return payload;
+}
+
+function normalizeRecipe(recipe, fallbackLabel = '') {
+  if (!recipe || typeof recipe !== 'object') return null;
+  const nutrients = recipe.totalNutrients || {};
+  return {
+    label: recipe.label || fallbackLabel || 'Recipe',
+    uri: recipe.uri || '',
+    url: recipe.url || recipe.shareAs || '',
+    source: recipe.source || '',
+    calories: Math.round(Number(recipe.calories || nutrients.ENERC_KCAL?.quantity || 0)),
+    protein: Math.round(Number(nutrients.PROCNT?.quantity || 0)),
+    carbs: Math.round(Number(nutrients.CHOCDF?.quantity || nutrients['CHOCDF.net']?.quantity || 0)),
+    fat: Math.round(Number(nutrients.FAT?.quantity || 0)),
+    ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
+    ingredientLines: Array.isArray(recipe.ingredientLines) ? recipe.ingredientLines : []
+  };
+}
+
+function parseEdamamMealPlanResponse(data, mealsPerDay) {
+  if (!data) return { weeklyMenu: [], shoppingList: [] };
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const labels = mealSectionLabels(mealsPerDay);
+  const weeklyMenu = [];
+  const recipeBucket = [];
+
+  const candidateArrays = [];
+  if (Array.isArray(data.selection)) candidateArrays.push(data.selection);
+  if (Array.isArray(data.plan)) candidateArrays.push(data.plan);
+  if (Array.isArray(data.days)) candidateArrays.push(data.days);
+  if (Array.isArray(data.items)) candidateArrays.push(data.items);
+
+  for (const arr of candidateArrays) {
+    arr.forEach((entry, index) => {
+      const dayName = entry?.day || entry?.title || days[index] || `Day ${index + 1}`;
+      const meals = [];
+      labels.forEach(label => {
+        const key = Object.keys(entry || {}).find(k => k.toLowerCase() === label.toLowerCase() || k.toLowerCase() === label.replace(/\s+/g, '').toLowerCase());
+        const recipe = normalizeRecipe(entry?.[key], label);
+        if (recipe) {
+          meals.push(`${label}: ${recipe.label}${recipe.calories ? ` - ${recipe.calories} kcal` : ''}`);
+          recipeBucket.push(recipe);
+        }
+      });
+      if (meals.length) weeklyMenu.push({ day: dayName, meals });
+    });
+  }
+
+  if (!weeklyMenu.length) {
+    const extracted = [];
+    (function walk(node) {
+      if (!node) return;
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (typeof node !== 'object') return;
+      if (node.label && node.uri) extracted.push(normalizeRecipe(node));
+      Object.values(node).forEach(walk);
+    })(data);
+    extracted.filter(Boolean).forEach(recipeBucket.push.bind(recipeBucket));
+    for (let i = 0; i < Math.min(days.length, Math.ceil(extracted.length / labels.length)); i++) {
+      const meals = [];
+      for (let j = 0; j < labels.length; j++) {
+        const recipe = extracted[(i * labels.length) + j];
+        if (recipe) meals.push(`${labels[j]}: ${recipe.label}${recipe.calories ? ` - ${recipe.calories} kcal` : ''}`);
+      }
+      if (meals.length) weeklyMenu.push({ day: days[i], meals });
+    }
+  }
+
+  return { weeklyMenu, shoppingList: buildShoppingList(recipeBucket) };
+}
+
+function buildShoppingList(recipes) {
+  const map = new Map();
+  recipes.forEach(recipe => {
+    (recipe.ingredients || []).forEach(ingredient => {
+      const food = ingredient.food || ingredient.text || ingredient.foodCategory || '';
+      if (!food) return;
+      const measure = ingredient.measure?.label || ingredient.measure || '';
+      const key = `${food.toLowerCase()}|${String(measure).toLowerCase()}`;
+      const prev = map.get(key) || { food, measure: measure || '', quantity: 0, weight: 0 };
+      prev.quantity += Number(ingredient.quantity || 0);
+      prev.weight += Number(ingredient.weight || 0);
+      map.set(key, prev);
+    });
+  });
+  return Array.from(map.values())
+    .sort((a, b) => a.food.localeCompare(b.food))
+    .slice(0, 60)
+    .map(item => ({
+      label: item.food,
+      detail: item.quantity && item.measure
+        ? `${trimNumber(item.quantity, 1)} ${item.measure}`
+        : item.weight
+          ? `${trimNumber(item.weight, 0)} g`
+          : 'see recipe details'
+    }));
+}
+
+async function requestEdamamWeeklyMenu(profile, t) {
+  const cfg = readEdamamSettings();
+  if (!cfg.appId || !cfg.appKey || cfg.mode === 'local') return null;
+  const body = JSON.stringify(buildEdamamPayload(profile, t));
+  const endpointCandidates = [
+    `https://api.edamam.com/api/meal-planner/v1/${encodeURIComponent(cfg.appId)}/select?app_id=${encodeURIComponent(cfg.appId)}&app_key=${encodeURIComponent(cfg.appKey)}`,
+    `https://api.edamam.com/api/meal-planner/v1/${encodeURIComponent(cfg.userId)}/select?app_id=${encodeURIComponent(cfg.appId)}&app_key=${encodeURIComponent(cfg.appKey)}`
+  ];
+  let lastError = null;
+  for (const url of endpointCandidates) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Edamam-Account-User': cfg.userId
+      },
+      body
+    });
+    if (response.ok) {
+      return parseEdamamMealPlanResponse(await response.json(), profile.mealsPerDay);
+    }
+    lastError = new Error(`Edamam meal planner request failed with ${response.status}`);
+    if (response.status !== 404) break;
+  }
+  throw lastError || new Error('Edamam meal planner request failed.');
+}
+
+function weeklyMenuToMarkdown(days, generatedBy = 'local') {
+  const rows = ['# Weekly menu', ''];
+  days.forEach(day => {
+    rows.push(`## ${day.day}`);
+    day.meals.forEach(meal => rows.push(`- ${meal}`));
+    rows.push('');
+  });
+  return rows.join('\n');
+}
+
+function shoppingListToMarkdown(items, generatedBy = 'edamam') {
+  const rows = ['# Shopping list', '', `Generated from ${generatedBy} menu output.`, ''];
+  items.forEach(item => rows.push(`- ${item.label}${item.detail ? ` - ${item.detail}` : ''}`));
+  return rows.join('\n');
+}
+
 async function buildPlan() {
   if (!storage) return toast('Connect a vault folder first.', 'error');
   const profile = collectProfile();
   Object.assign(profile, targets(profile));
   state.profile = profile;
+  let generatedBy = 'local';
+  let menuDays = [];
+  state.shoppingList = [];
   await writeFile(`${BASE}/Profile.md`, markdown({
     goal: profile.goal,
     sex: profile.sex,
@@ -1235,8 +1791,12 @@ async function buildPlan() {
     training_days: profile.trainingDays,
     session_minutes: profile.sessionMinutes,
     meals_per_day: profile.mealsPerDay,
+    menu_style: profile.menuStyle,
+    prep_style: profile.prepStyle,
     equipment: profile.equipment,
     diet_style: profile.dietStyle,
+    favorite_foods: profile.favoriteFoods,
+    avoid_foods: profile.avoidFoods,
     preferences: profile.preferences,
     calories_target: profile.caloriesTarget,
     protein_target: profile.proteinTarget,
@@ -1245,9 +1805,54 @@ async function buildPlan() {
   }, profile.notes));
   await writeFile(`${BASE}/Workout Plan.md`, markdown({ updated: todayISO(), goal: profile.goal }, buildWorkout(profile, profile)));
   await writeFile(`${BASE}/Meal Plan.md`, markdown({ updated: todayISO(), calories_target: profile.caloriesTarget }, buildMeals(profile, profile)));
+  try {
+    const edamamMenu = await requestEdamamWeeklyMenu(profile, profile);
+    if (edamamMenu && edamamMenu.weeklyMenu.length) {
+      generatedBy = 'edamam';
+      menuDays = edamamMenu.weeklyMenu;
+      state.shoppingList = edamamMenu.shoppingList;
+    }
+  } catch (error) {
+    console.error(error);
+    toast('Edamam menu failed, using local menu templates instead.', 'error');
+  }
+  if (!menuDays.length) {
+    const fallbackMenu = readWeeklyMenuFromBody(buildWeeklyMenu(profile, profile));
+    menuDays = fallbackMenu;
+  }
+  const menuMeta = { updated: todayISO(), meals_per_day: profile.mealsPerDay, generated_by: generatedBy };
+  const menuBody = weeklyMenuToMarkdown(menuDays, generatedBy);
+  await writeFile(`${BASE}/Weekly Menu.md`, markdown(menuMeta, menuBody));
+  await writeFile(`${BASE}/Menus/${todayISO()}.md`, markdown(menuMeta, menuBody));
+  if (state.shoppingList.length) {
+    const shoppingMeta = { updated: todayISO(), generated_by: generatedBy };
+    const shoppingBody = shoppingListToMarkdown(state.shoppingList, generatedBy);
+    await writeFile(`${BASE}/Shopping List.md`, markdown(shoppingMeta, shoppingBody));
+    await writeFile(`${BASE}/Shopping Lists/${todayISO()}.md`, markdown(shoppingMeta, shoppingBody));
+  } else {
+    await writeFile(`${BASE}/Shopping List.md`, markdown({ updated: todayISO(), generated_by: generatedBy }, '# Shopping list\n\nNo live shopping list was generated for this menu.'));
+  }
+  state.weeklyMenu = menuDays;
   renderTargets();
   renderStats();
-  toast('Profile and plans saved.');
+  renderWeeklyMenu();
+  renderShoppingList();
+  toast(generatedBy === 'edamam' ? 'Profile, plans, and Edamam menu saved.' : 'Profile, plans, and weekly menu saved.');
+}
+
+function readWeeklyMenuFromBody(body) {
+  const days = [];
+  let current = null;
+  body.split('\n').forEach(line => {
+    if (line.startsWith('## ')) {
+      current = { day: line.slice(3).trim(), meals: [], notes: [] };
+      days.push(current);
+      return;
+    }
+    if (!current || !line.trim()) return;
+    if (line.startsWith('- ')) current.meals.push(line.slice(2).trim());
+  });
+  return days;
 }
 
 async function saveDay() {
@@ -1260,12 +1865,34 @@ async function saveDay() {
     calories: num('calories'),
     protein: num('protein'),
     water: num('water'),
-    workout: document.getElementById('workout').value.trim()
+    workout: document.getElementById('workout').value.trim(),
+    meals: document.getElementById('dayMeals').value.trim()
   }, document.getElementById('dayNotes').value.trim()));
   state.history = await readHistory();
   renderHistory();
   renderStats();
   toast('Day saved.');
+}
+
+async function saveMeal() {
+  if (!storage) return toast('Connect a vault folder first.', 'error');
+  const name = document.getElementById('mealName').value.trim();
+  if (!name) return toast('Add a meal name first.', 'error');
+  await ensureFolder(`${BASE}/Meals`);
+  const meal = {
+    updated: todayISO(),
+    name,
+    serving: document.getElementById('mealServing').value.trim(),
+    calories: num('mealCalories'),
+    protein: num('mealProtein'),
+    carbs: num('mealCarbs'),
+    fat: num('mealFat')
+  };
+  await writeFile(`${BASE}/Meals/${slugify(name)}.md`, markdown(meal, document.getElementById('mealNotes').value.trim()));
+  state.meals = await readMeals();
+  renderMeals();
+  ['mealName', 'mealServing', 'mealCalories', 'mealProtein', 'mealCarbs', 'mealFat', 'mealNotes'].forEach(id => set(id, ''));
+  toast('Custom meal saved.');
 }
 
 function renderTargets() {
@@ -1281,6 +1908,59 @@ function renderTargets() {
     <div class="history-item"><div><div class="history-title">${p.stepGoal}</div><div class="history-sub">step floor, about ${milesText(stepsToMiles(p.stepGoal))}</div></div></div>
     <div class="history-item"><div><div class="history-title">${p.waterGoal} oz</div><div class="history-sub">hydration target</div></div></div>
   `;
+}
+
+function renderWeeklyMenu() {
+  const target = document.getElementById('weeklyMenu');
+  if (!state.weeklyMenu.length) {
+    target.innerHTML = `<div class="empty">Build a plan to generate a 7-day menu.</div>`;
+    return;
+  }
+  target.innerHTML = state.weeklyMenu.map(day => `
+    <div class="history-item">
+      <div>
+        <div class="history-title">${escapeHtml(day.day)}</div>
+        <div class="detail-lines">${day.meals.map(line => `<div>${escapeHtml(line)}</div>`).join('')}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderShoppingList() {
+  const target = document.getElementById('shoppingList');
+  if (!state.shoppingList.length) {
+    const cfg = readEdamamSettings();
+    target.innerHTML = `<div class="empty">${cfg.mode === 'local' ? 'Switch menu source to Edamam to generate a live shopping list.' : 'Build a fresh Edamam menu to generate a live shopping list.'}</div>`;
+    return;
+  }
+  target.innerHTML = state.shoppingList.map(item => `
+    <div class="history-item">
+      <div>
+        <div class="history-title">${escapeHtml(item.label)}</div>
+        <div class="history-sub">${escapeHtml(item.detail)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderMeals() {
+  const target = document.getElementById('mealLibrary');
+  if (!state.meals.length) {
+    target.innerHTML = `<div class="empty">No saved custom meals yet.</div>`;
+    return;
+  }
+  target.innerHTML = state.meals.map(meal => `
+    <div class="history-item">
+      <div>
+        <div class="history-title">${escapeHtml(meal.name)}</div>
+        <div class="history-sub">${escapeHtml(meal.serving || 'custom serving')}</div>
+        <div class="detail-lines">
+          <div>${fmt(meal.calories)} calories, ${fmt(meal.protein)}g protein, ${fmt(meal.carbs)}g carbs, ${fmt(meal.fat)}g fat</div>
+          ${meal.notes ? `<div>${escapeHtml(meal.notes)}</div>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
 }
 
 function renderStats() {
@@ -1305,6 +1985,7 @@ function renderHistory() {
       <div>
         <div class="history-title">${day.date}</div>
         <div class="history-sub">${fmt(day.steps)} steps${day.distanceMiles ? `, ${milesText(day.distanceMiles)}` : ''}, ${fmt(day.calories)} calories, ${fmt(day.protein)}g protein</div>
+        ${day.meals ? `<div class="detail-lines"><div>${escapeHtml(day.meals)}</div></div>` : ''}
         ${day.workout ? `<span class="pill">${escapeHtml(day.workout)}</span>` : ''}
       </div>
     </div>
