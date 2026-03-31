@@ -42,6 +42,11 @@ body {
   gap: 16px;
   flex-wrap: wrap;
 }
+.header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .wordmark {
   font-family: 'Diesel Rudolf', serif;
   font-size: 40px;
@@ -59,31 +64,52 @@ body {
 .back-link {
   color: var(--muted);
   text-decoration: none;
-  display: inline-block;
-  margin-bottom: 6px;
+  opacity: 0.7;
 }
-.status {
+.back-link:hover { color: var(--amber); opacity: 1; }
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.identity-pill {
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 10px 14px;
+  min-height: 42px;
+  padding: 0 14px;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   background: rgba(255,255,255,0.02);
 }
-.dot {
+.status-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--green);
+  flex-shrink: 0;
 }
-.status-copy { display: grid; gap: 2px; }
-.status-copy .eyebrow { color: var(--muted); }
-.status-copy strong {
+.status-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.status-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1;
+}
+.user-email {
   font-family: 'IBM Plex Sans', sans-serif;
   color: var(--amber);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
+  letter-spacing: 0.06em;
 }
 .seam {
   width: 100%;
@@ -152,10 +178,45 @@ body {
   margin-top: 14px;
 }
 .auth-option {
-  background: var(--bg2);
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 16px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.auth-option:hover { border-color: var(--border2); }
+.auth-copy {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.auth-option-label {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+.auth-option-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--cream);
+}
+.auth-option-desc {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+  flex: 1;
+  margin-bottom: 10px;
+}
+.auth-option .btn-primary {
+  width: 100%;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  padding: 14px;
 }
 .field-grid {
   display: grid;
@@ -269,22 +330,28 @@ body {
   body { padding: 16px 12px 40px; }
   .wordmark { font-size: 32px; }
   .stats, .field-grid, .auth-options { grid-template-columns: 1fr; }
+  .header { align-items: flex-start; }
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .identity-pill { max-width: 100%; }
 }
 </style>
 <script src="https://accounts.google.com/gsi/client"></script>
 </head>
 <body>
 <header class="header">
-  <div>
-    <a class="back-link" href="https://www.stoult.com/workshop/">&lt; back to workshop</a>
+  <div class="header-left">
+    <a class="back-link" href="https://www.stoult.com/workshop/">← return to the workshop</a>
     <div class="wordmark">the <em>trainer</em></div>
   </div>
-  <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;">
-    <div class="status">
-      <div class="dot"></div>
+  <div class="header-right">
+    <div class="identity-pill">
+      <div class="status-dot"></div>
       <div class="status-copy">
-        <div class="eyebrow" id="statusMode">private vault</div>
-        <strong id="vaultName">not connected</strong>
+        <span class="status-label" id="statusMode">private vault</span>
+        <span class="user-email" id="vaultName">not connected</span>
       </div>
     </div>
     <button class="btn btn-secondary" id="signOutBtn" style="display:none;">sign out</button>
@@ -305,30 +372,30 @@ body {
 
 <div id="authGate" class="section" style="display:none; max-width:660px;">
   <div class="eyebrow">connect vault</div>
-  <div class="copy">The Trainer uses the same vault setup as the other apps: choose a local folder on this device, or connect to the same vault in Google Drive.</div>
+  <div class="auth-copy">The Trainer uses the same vault setup as the other apps: choose a local folder on this device, or connect to the same vault in Google Drive.</div>
 
   <div id="setupOptions" class="auth-options">
     <div class="auth-option">
-      <div class="eyebrow">this device only</div>
-      <div class="history-title" style="margin-top:10px;">Local folder</div>
-      <div class="copy" style="margin:10px 0 14px;">Point directly to your vault folder on this computer. Fast, no account needed - desktop only.</div>
+      <div class="auth-option-label">this device only</div>
+      <div class="auth-option-title">Local folder</div>
+      <div class="auth-option-desc">Point directly to your vault folder on this computer. Fast, no account needed — desktop only.</div>
       <button class="btn btn-primary" id="connectBtn">pick folder</button>
     </div>
     <div class="auth-option" id="googleOption">
-      <div class="eyebrow">any device</div>
-      <div class="history-title" style="margin-top:10px;">Google Drive</div>
-      <div class="copy" style="margin:10px 0 14px;">Sign in with Google to access your Drive vault from desktop, mobile, or anywhere.</div>
+      <div class="auth-option-label">any device</div>
+      <div class="auth-option-title">Google Drive</div>
+      <div class="auth-option-desc">Sign in with Google to access your Drive vault from desktop, mobile, or anywhere.</div>
       <button class="btn btn-primary" id="googleBtn">sign in with google</button>
     </div>
   </div>
 
   <div id="reconnectRow" style="display:none; margin-top:14px;">
-    <div class="copy">Your vault was previously connected. Reconnect to continue.</div>
+    <div class="auth-copy">Your vault was previously connected. Tap to reconnect.</div>
     <button class="btn btn-primary" id="reconnectBtn">reconnect vault</button>
   </div>
 
   <div id="vaultPathRow" style="display:none; margin-top:18px;">
-    <div class="copy">Signed in. Enter the name of your vault folder in Google Drive.</div>
+    <div class="auth-copy">Signed in. Enter the name of your vault folder in Google Drive.</div>
     <div class="field">
       <label class="label" for="vaultPathInput">vault folder name</label>
       <input class="input" id="vaultPathInput" placeholder="e.g. MyVault">
