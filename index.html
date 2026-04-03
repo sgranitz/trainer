@@ -162,11 +162,17 @@ nav.tabs {
 .meal-row { padding: 8px 12px; border-bottom: 1px solid var(--border); transition: opacity 0.15s; }
 .meal-row:last-child { border-bottom: none; }
 .meal-row.skipped { opacity: 0.32; }
-.meal-row-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 4px; }
+.meal-row-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 4px; cursor: pointer; }
+.meal-row-top:hover .meal-name { color: var(--amber); }
 .meal-row-info { flex: 1; min-width: 0; }
 .meal-type { font-family: var(--mono); font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber-dim); margin-bottom: 2px; }
-.meal-name { font-size: 12px; color: var(--cream); line-height: 1.4; }
+.meal-name { font-size: 12px; color: var(--cream); line-height: 1.4; transition: color 0.15s; }
 .meal-cal { font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 2px; }
+.recipe-card { margin-top: 8px; padding: 8px 10px; background: var(--bg2); border-radius: var(--radius); border-left: 2px solid var(--amber-dim); }
+.recipe-macros { font-family: var(--mono); font-size: 10px; color: var(--amber); margin-bottom: 6px; letter-spacing: 0.06em; }
+.recipe-ings { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.recipe-ing { font-family: var(--mono); font-size: 9px; background: var(--card2); color: var(--muted); padding: 2px 6px; border-radius: 999px; }
+.recipe-steps { font-size: 11px; color: var(--muted); line-height: 1.55; }
 .meal-actions { display: flex; gap: 2px; flex-shrink: 0; margin-top: 1px; }
 .meal-btn {
   background: none; border: none; cursor: pointer; color: var(--faint);
@@ -964,6 +970,7 @@ const CM_PER_INCH = 2.54;
 let storage = null;
 let state = { profile: null, weeklyMenu: [], history: [] };
 let activeSwapKey = null;
+let expandedMealKey = null;
 let _toastTimer = null;
 
 /* ──────────────────────────────────────────────────────────────
@@ -1335,133 +1342,216 @@ function buildWorkoutPlan(profile) {
 /* ──────────────────────────────────────────────────────────────
    MEAL LIBRARY & MENU GENERATION
    ────────────────────────────────────────────────────────────── */
-function mealLibrary(dietStyle) {
-  const pb = dietStyle === 'plant-based';
-  const lc = dietStyle === 'low-carb';
 
-  return {
-    breakfast: pb ? [
-      { name: 'Tofu scramble with spinach and peppers',      cal: '~300 cal · 18g P', ing: ['firm tofu', 'spinach', 'bell pepper', 'onion', 'olive oil'] },
-      { name: 'Chia pudding with mango and coconut',         cal: '~340 cal · 10g P', ing: ['chia seeds', 'coconut milk', 'mango', 'maple syrup'] },
-      { name: 'Oat bowl with almond butter and banana',      cal: '~380 cal · 12g P', ing: ['oats', 'almond butter', 'banana', 'almond milk'] },
-      { name: 'Avocado toast with hemp seeds',               cal: '~320 cal · 10g P', ing: ['sourdough bread', 'avocado', 'hemp seeds', 'lemon'] },
-      { name: 'Smoothie bowl with berries and granola',      cal: '~360 cal · 8g P',  ing: ['frozen berries', 'banana', 'oat milk', 'granola', 'chia seeds'] },
-      { name: 'Tempeh bacon and avocado wrap',               cal: '~400 cal · 22g P', ing: ['tempeh', 'whole wheat tortilla', 'avocado', 'lettuce', 'tomato'] },
-    ] : lc ? [
-      { name: 'Scrambled eggs with smoked salmon',           cal: '~340 cal · 30g P', ing: ['eggs', 'smoked salmon', 'cream cheese', 'capers', 'butter'] },
-      { name: 'Greek yogurt with walnuts and berries',       cal: '~280 cal · 22g P', ing: ['Greek yogurt', 'walnuts', 'mixed berries'] },
-      { name: 'Egg and veggie frittata',                     cal: '~310 cal · 24g P', ing: ['eggs', 'bell pepper', 'spinach', 'feta cheese', 'olive oil'] },
-      { name: 'Cottage cheese with cucumber and dill',       cal: '~240 cal · 26g P', ing: ['cottage cheese', 'cucumber', 'dill', 'olive oil'] },
-      { name: 'Ham and cheese omelet',                       cal: '~360 cal · 28g P', ing: ['eggs', 'ham', 'cheddar cheese', 'butter'] },
-      { name: 'Avocado egg bowl',                            cal: '~350 cal · 18g P', ing: ['avocado', 'eggs', 'cherry tomatoes', 'olive oil'] },
-    ] : [
-      { name: 'Greek yogurt parfait with berries and granola', cal: '~320 cal · 24g P', ing: ['Greek yogurt', 'mixed berries', 'granola', 'honey'] },
-      { name: 'Scrambled eggs with spinach and feta',          cal: '~340 cal · 26g P', ing: ['eggs', 'spinach', 'feta cheese', 'olive oil'] },
-      { name: 'Protein oats with banana and almond butter',    cal: '~380 cal · 28g P', ing: ['oats', 'protein powder', 'banana', 'almond butter', 'almond milk'] },
-      { name: 'Turkey sausage and egg scramble',               cal: '~380 cal · 32g P', ing: ['turkey sausage', 'eggs', 'bell pepper', 'onion'] },
-      { name: 'Cottage cheese bowl with pineapple and nuts',   cal: '~300 cal · 25g P', ing: ['cottage cheese', 'pineapple', 'almonds', 'honey'] },
-      { name: 'Smoked salmon bagel thin',                      cal: '~350 cal · 28g P', ing: ['smoked salmon', 'bagel thin', 'cream cheese', 'capers', 'cucumber'] },
-    ],
-    amSnack: pb ? [
-      { name: 'Apple with almond butter',      cal: '~200 cal · 6g P',  ing: ['apple', 'almond butter'] },
-      { name: 'Hummus with veggie sticks',     cal: '~180 cal · 8g P',  ing: ['hummus', 'carrots', 'celery', 'cucumber'] },
-      { name: 'Trail mix with cashews',        cal: '~220 cal · 6g P',  ing: ['cashews', 'dried mango', 'pumpkin seeds'] },
-      { name: 'Edamame with sea salt',         cal: '~180 cal · 14g P', ing: ['edamame'] },
-    ] : [
-      { name: 'Protein shake with banana',     cal: '~250 cal · 30g P', ing: ['protein powder', 'banana', 'almond milk'] },
-      { name: 'Hard-boiled eggs with cucumber', cal: '~180 cal · 14g P', ing: ['eggs', 'cucumber'] },
-      { name: 'Cottage cheese with berries',   cal: '~200 cal · 20g P', ing: ['cottage cheese', 'mixed berries'] },
-      { name: 'Turkey roll-ups with cheese',   cal: '~200 cal · 18g P', ing: ['turkey breast', 'cheddar cheese'] },
-    ],
-    lunch: pb ? [
-      { name: 'Chickpea and roasted veggie bowl',      cal: '~460 cal · 18g P', ing: ['chickpeas', 'sweet potato', 'bell pepper', 'tahini', 'brown rice'] },
-      { name: 'Lentil soup with sourdough',            cal: '~420 cal · 20g P', ing: ['lentils', 'carrots', 'celery', 'onion', 'tomatoes', 'sourdough bread'] },
-      { name: 'Tofu stir-fry with brown rice',         cal: '~480 cal · 24g P', ing: ['firm tofu', 'broccoli', 'snap peas', 'soy sauce', 'ginger', 'brown rice'] },
-      { name: 'Black bean and avocado burrito bowl',   cal: '~500 cal · 20g P', ing: ['black beans', 'brown rice', 'avocado', 'salsa', 'corn', 'lime'] },
-      { name: 'Tempeh and kale grain bowl',            cal: '~490 cal · 26g P', ing: ['tempeh', 'kale', 'quinoa', 'cherry tomatoes'] },
-      { name: 'Veggie burger with sweet potato fries', cal: '~520 cal · 18g P', ing: ['veggie burger patty', 'whole wheat bun', 'lettuce', 'tomato', 'sweet potato'] },
-    ] : lc ? [
-      { name: 'Grilled chicken over mixed greens',    cal: '~380 cal · 40g P', ing: ['chicken breast', 'mixed greens', 'avocado', 'cherry tomatoes', 'olive oil', 'lemon'] },
-      { name: 'Tuna-stuffed avocado',                 cal: '~360 cal · 34g P', ing: ['canned tuna', 'avocado', 'celery', 'lemon', 'Greek yogurt'] },
-      { name: 'Salmon and cucumber roll bowl',        cal: '~400 cal · 38g P', ing: ['salmon', 'cucumber', 'avocado', 'cauliflower rice', 'soy sauce'] },
-      { name: 'Turkey lettuce wrap with bacon',       cal: '~340 cal · 32g P', ing: ['turkey breast', 'lettuce', 'bacon', 'avocado', 'mustard'] },
-      { name: 'Egg salad in lettuce cups',            cal: '~300 cal · 22g P', ing: ['eggs', 'lettuce', 'celery', 'Greek yogurt', 'mustard'] },
-      { name: 'Steak and arugula salad',              cal: '~440 cal · 42g P', ing: ['flank steak', 'arugula', 'parmesan', 'cherry tomatoes', 'olive oil', 'lemon'] },
-    ] : [
-      { name: 'Grilled chicken rice bowl with broccoli', cal: '~480 cal · 42g P', ing: ['chicken breast', 'brown rice', 'broccoli', 'olive oil', 'garlic'] },
-      { name: 'Tuna salad lettuce wraps',                cal: '~350 cal · 36g P', ing: ['canned tuna', 'lettuce', 'celery', 'Greek yogurt', 'lemon'] },
-      { name: 'Turkey and avocado wrap',                 cal: '~430 cal · 35g P', ing: ['turkey breast', 'whole wheat tortilla', 'avocado', 'tomato', 'spinach'] },
-      { name: 'Salmon and quinoa bowl',                  cal: '~500 cal · 40g P', ing: ['salmon', 'quinoa', 'cucumber', 'cherry tomatoes', 'lemon'] },
-      { name: 'Lean beef and veggie stir-fry',           cal: '~460 cal · 38g P', ing: ['lean beef', 'broccoli', 'snap peas', 'soy sauce', 'ginger', 'brown rice'] },
-      { name: 'Shrimp and mixed greens salad',           cal: '~380 cal · 34g P', ing: ['shrimp', 'mixed greens', 'avocado', 'cherry tomatoes', 'olive oil'] },
-    ],
-    pmSnack: pb ? [
-      { name: 'Peanut butter rice cakes',  cal: '~200 cal · 7g P',  ing: ['rice cakes', 'peanut butter', 'banana'] },
-      { name: 'Roasted chickpeas',         cal: '~180 cal · 10g P', ing: ['chickpeas', 'olive oil'] },
-      { name: 'Coconut yogurt with granola', cal: '~220 cal · 6g P', ing: ['coconut yogurt', 'granola', 'mixed berries'] },
-      { name: 'Celery with almond butter', cal: '~160 cal · 5g P',  ing: ['celery', 'almond butter'] },
-    ] : [
-      { name: 'Apple with almond butter',      cal: '~220 cal · 6g P',  ing: ['apple', 'almond butter'] },
-      { name: 'Greek yogurt with walnuts',     cal: '~200 cal · 15g P', ing: ['Greek yogurt', 'walnuts'] },
-      { name: 'Hummus with carrots and celery', cal: '~180 cal · 8g P', ing: ['hummus', 'carrots', 'celery'] },
-      { name: 'Protein shake',                 cal: '~200 cal · 20g P', ing: ['protein powder', 'almond milk'] },
-    ],
-    dinner: pb ? [
-      { name: 'Lentil and sweet potato curry',       cal: '~520 cal · 20g P', ing: ['lentils', 'sweet potato', 'coconut milk', 'curry powder', 'onion', 'brown rice'] },
-      { name: 'Black bean tacos with mango salsa',   cal: '~480 cal · 18g P', ing: ['black beans', 'corn tortillas', 'mango', 'avocado', 'red onion', 'lime'] },
-      { name: 'Baked tempeh with broccoli',          cal: '~500 cal · 30g P', ing: ['tempeh', 'broccoli', 'quinoa', 'soy sauce', 'garlic', 'sesame oil'] },
-      { name: 'Chickpea tikka masala',               cal: '~510 cal · 18g P', ing: ['chickpeas', 'canned tomatoes', 'coconut milk', 'onion', 'garam masala', 'brown rice'] },
-      { name: 'Veggie-stuffed bell peppers',         cal: '~440 cal · 16g P', ing: ['bell peppers', 'brown rice', 'black beans', 'corn', 'tomato sauce'] },
-      { name: 'Tofu fried rice with edamame',        cal: '~490 cal · 22g P', ing: ['firm tofu', 'brown rice', 'edamame', 'carrots', 'soy sauce', 'sesame oil'] },
-    ] : lc ? [
-      { name: 'Baked salmon with asparagus',                   cal: '~460 cal · 42g P', ing: ['salmon', 'asparagus', 'olive oil', 'lemon', 'garlic'] },
-      { name: 'Chicken thighs with roasted Brussels sprouts',  cal: '~480 cal · 40g P', ing: ['chicken thighs', 'Brussels sprouts', 'olive oil', 'garlic', 'parmesan'] },
-      { name: 'Beef and broccoli stir-fry',                    cal: '~420 cal · 38g P', ing: ['lean beef', 'broccoli', 'soy sauce', 'ginger', 'sesame oil'] },
-      { name: 'Shrimp fajita bowl with cauliflower rice',      cal: '~380 cal · 36g P', ing: ['shrimp', 'bell pepper', 'onion', 'cauliflower rice', 'avocado', 'lime'] },
-      { name: 'Pork tenderloin with green beans',              cal: '~460 cal · 44g P', ing: ['pork tenderloin', 'green beans', 'olive oil', 'garlic', 'rosemary'] },
-      { name: 'Turkey chili (bean-free)',                      cal: '~400 cal · 40g P', ing: ['ground turkey', 'canned tomatoes', 'onion', 'bell pepper', 'chili powder'] },
-    ] : [
-      { name: 'Baked salmon with asparagus and sweet potato', cal: '~520 cal · 40g P', ing: ['salmon', 'asparagus', 'sweet potato', 'olive oil', 'lemon'] },
-      { name: 'Chicken thighs with roasted veggies',          cal: '~480 cal · 38g P', ing: ['chicken thighs', 'zucchini', 'bell pepper', 'onion', 'olive oil', 'garlic'] },
-      { name: 'Lean beef meatballs with zucchini noodles',    cal: '~440 cal · 36g P', ing: ['ground beef', 'zucchini', 'marinara sauce', 'parmesan'] },
-      { name: 'Shrimp and cauliflower rice stir-fry',         cal: '~400 cal · 34g P', ing: ['shrimp', 'cauliflower rice', 'snap peas', 'sesame oil', 'soy sauce'] },
-      { name: 'Turkey chili with kidney beans',               cal: '~460 cal · 40g P', ing: ['ground turkey', 'canned tomatoes', 'kidney beans', 'onion', 'chili powder'] },
-      { name: 'Chicken and vegetable soup',                   cal: '~380 cal · 32g P', ing: ['chicken breast', 'carrots', 'celery', 'onion', 'chicken broth', 'garlic'] },
-    ],
-    evening: [
-      { name: 'Casein protein shake',               cal: '~150 cal · 25g P', ing: ['casein protein powder', 'almond milk'] },
-      { name: 'Cottage cheese with cinnamon',       cal: '~160 cal · 22g P', ing: ['cottage cheese', 'cinnamon', 'honey'] },
-      { name: 'Greek yogurt with dark chocolate',   cal: '~180 cal · 14g P', ing: ['Greek yogurt', 'dark chocolate chips'] },
-      { name: 'Warm herbal tea with almonds',       cal: '~120 cal · 4g P',  ing: ['chamomile tea', 'almonds'] },
-    ],
-  };
+// tags: 'high-protein' | 'low-carb' | 'plant-based'  (meals can have multiple)
+// slot: 'breakfast' | 'amSnack' | 'lunch' | 'pmSnack' | 'dinner' | 'evening'
+// cal/protein: numbers; steps: 1–3 sentence prep note
+const MEALS = [
+  // ── BREAKFAST ───────────────────────────────────────────────
+  { slot:'breakfast', name:'Greek yogurt parfait with berries and granola',   cal:320, protein:24, tags:['high-protein'], ingredients:['Greek yogurt','mixed berries','granola','honey'],                          steps:'Layer yogurt with berries and granola in a bowl. Drizzle honey on top.' },
+  { slot:'breakfast', name:'Scrambled eggs with spinach and feta',            cal:340, protein:26, tags:['high-protein'], ingredients:['eggs','spinach','feta cheese','olive oil','garlic'],                       steps:'Wilt spinach in olive oil with garlic. Add beaten eggs and crumbled feta; cook low and slow.' },
+  { slot:'breakfast', name:'Protein oats with banana and almond butter',      cal:380, protein:28, tags:['high-protein'], ingredients:['oats','protein powder','banana','almond butter','almond milk'],            steps:'Cook oats in almond milk. Stir in protein powder off heat. Top with sliced banana and almond butter.' },
+  { slot:'breakfast', name:'Turkey sausage and egg scramble',                 cal:380, protein:32, tags:['high-protein'], ingredients:['turkey sausage','eggs','bell pepper','onion','olive oil'],                 steps:'Cook crumbled sausage with diced pepper and onion. Add beaten eggs and scramble until set.' },
+  { slot:'breakfast', name:'Cottage cheese bowl with pineapple and nuts',     cal:300, protein:25, tags:['high-protein'], ingredients:['cottage cheese','pineapple chunks','almonds','honey'],                     steps:'Spoon cottage cheese into a bowl. Top with pineapple, almonds, and a drizzle of honey.' },
+  { slot:'breakfast', name:'Smoked salmon bagel thin',                        cal:350, protein:28, tags:['high-protein'], ingredients:['smoked salmon','bagel thin','cream cheese','capers','cucumber','red onion'], steps:'Spread cream cheese on toasted bagel thin. Layer salmon, capers, cucumber, and red onion.' },
+  { slot:'breakfast', name:'Egg white omelet with mushrooms and turkey',      cal:280, protein:30, tags:['high-protein'], ingredients:['egg whites','mushrooms','turkey breast','spinach','olive oil'],            steps:'Sauté mushrooms and turkey in olive oil. Pour in egg whites, fold when set. Add spinach.' },
+  { slot:'breakfast', name:'Chicken and veggie breakfast burrito',            cal:420, protein:35, tags:['high-protein'], ingredients:['chicken breast','whole wheat tortilla','eggs','bell pepper','salsa','cheddar cheese'], steps:'Scramble eggs with diced peppers. Warm shredded chicken and roll everything into a tortilla with salsa and cheese.' },
+  { slot:'breakfast', name:'Scrambled eggs with smoked salmon',               cal:340, protein:30, tags:['high-protein','low-carb'], ingredients:['eggs','smoked salmon','cream cheese','capers','butter'],        steps:'Melt butter in a non-stick pan. Add beaten eggs and cook slowly. Fold in salmon and cream cheese off heat.' },
+  { slot:'breakfast', name:'Greek yogurt with walnuts and berries',           cal:280, protein:22, tags:['high-protein','low-carb'], ingredients:['Greek yogurt','walnuts','mixed berries'],                       steps:'Spoon yogurt into a bowl and top with walnuts and berries.' },
+  { slot:'breakfast', name:'Egg and veggie frittata',                         cal:310, protein:24, tags:['high-protein','low-carb'], ingredients:['eggs','bell pepper','spinach','feta cheese','olive oil'],       steps:'Whisk eggs and pour over sautéed vegetables in an oven-safe skillet. Top with feta and bake at 375°F for 15 min.' },
+  { slot:'breakfast', name:'Cottage cheese with cucumber and dill',           cal:240, protein:26, tags:['high-protein','low-carb'], ingredients:['cottage cheese','cucumber','fresh dill','olive oil','lemon'],   steps:'Mix cottage cheese with sliced cucumber, fresh dill, a squeeze of lemon, and drizzle of olive oil.' },
+  { slot:'breakfast', name:'Ham and cheese omelet',                           cal:360, protein:28, tags:['high-protein','low-carb'], ingredients:['eggs','ham','cheddar cheese','butter','chives'],               steps:'Beat eggs and cook in butter until just set. Fill with diced ham and shredded cheddar; fold and finish.' },
+  { slot:'breakfast', name:'Avocado egg bowl',                                cal:350, protein:18, tags:['low-carb'], ingredients:['avocado','eggs','cherry tomatoes','olive oil','everything bagel seasoning'],   steps:'Halve avocado and crack an egg into each half. Bake at 400°F for 12–15 min. Top with tomatoes and seasoning.' },
+  { slot:'breakfast', name:'Bacon and egg cups',                              cal:300, protein:22, tags:['low-carb'], ingredients:['bacon','eggs','cheddar cheese','chives'],                                      steps:'Line muffin tin with bacon strips. Crack an egg into each cup, sprinkle cheese, and bake at 375°F for 15 min.' },
+  { slot:'breakfast', name:'Tofu scramble with spinach and peppers',          cal:300, protein:18, tags:['plant-based'], ingredients:['firm tofu','spinach','bell pepper','onion','olive oil','turmeric'],         steps:'Crumble tofu into a hot pan with oil. Add vegetables and turmeric; cook 8–10 min until slightly golden.' },
+  { slot:'breakfast', name:'Chia pudding with mango and coconut',             cal:340, protein:10, tags:['plant-based'], ingredients:['chia seeds','coconut milk','mango','maple syrup','vanilla extract'],        steps:'Whisk chia seeds into coconut milk with vanilla and maple syrup. Refrigerate overnight. Top with diced mango.' },
+  { slot:'breakfast', name:'Oat bowl with almond butter and banana',          cal:380, protein:12, tags:['plant-based'], ingredients:['oats','almond butter','banana','almond milk','cinnamon'],                   steps:'Cook oats in almond milk. Top with sliced banana, almond butter, and a pinch of cinnamon.' },
+  { slot:'breakfast', name:'Avocado toast with hemp seeds',                   cal:320, protein:10, tags:['plant-based'], ingredients:['sourdough bread','avocado','hemp seeds','lemon','red pepper flakes'],      steps:'Toast bread and mash avocado on top with lemon juice. Sprinkle hemp seeds and red pepper flakes.' },
+  { slot:'breakfast', name:'Smoothie bowl with berries and granola',          cal:360, protein: 8, tags:['plant-based'], ingredients:['frozen berries','banana','oat milk','granola','chia seeds','coconut flakes'], steps:'Blend frozen berries and banana with just enough oat milk for a thick consistency. Top with granola, chia, and coconut.' },
+  { slot:'breakfast', name:'Tempeh bacon and avocado wrap',                   cal:400, protein:22, tags:['plant-based'], ingredients:['tempeh','whole wheat tortilla','avocado','lettuce','tomato','hot sauce'],   steps:'Slice tempeh thin and cook with soy sauce until crisp. Roll in tortilla with avocado, lettuce, and tomato.' },
+  { slot:'breakfast', name:'Peanut butter and banana overnight oats',         cal:360, protein:14, tags:['plant-based'], ingredients:['oats','peanut butter','banana','almond milk','chia seeds','maple syrup'],  steps:'Combine oats, chia, almond milk, PB, and maple syrup in a jar. Refrigerate overnight. Top with banana.' },
+  { slot:'breakfast', name:'Hard-boiled eggs and avocado toast',              cal:380, protein:20, tags:['high-protein','low-carb','plant-based'], ingredients:['eggs','sourdough bread','avocado','lemon','sea salt'], steps:'Hard boil eggs for 10 min and halve them. Mash avocado with lemon on toast; arrange eggs on top.' },
+  { slot:'breakfast', name:'Cottage cheese pancakes',                         cal:340, protein:22, tags:['high-protein','low-carb'], ingredients:['cottage cheese','eggs','oats','vanilla extract','maple syrup'],  steps:'Blend cottage cheese, eggs, oats, and vanilla until smooth. Cook on a non-stick pan like regular pancakes.' },
+  { slot:'breakfast', name:'Egg muffins with vegetables',                     cal:280, protein:24, tags:['high-protein','low-carb'], ingredients:['eggs','broccoli','bell pepper','cheddar cheese','olive oil'],   steps:'Whisk eggs and fold in chopped vegetables and cheese. Pour into greased muffin tin and bake at 375°F for 18 min.' },
+  // ── AM SNACK ─────────────────────────────────────────────────
+  { slot:'amSnack', name:'Protein shake with banana',          cal:250, protein:30, tags:['high-protein'], ingredients:['protein powder','banana','almond milk'],                    steps:'Blend protein powder, banana, and almond milk until smooth.' },
+  { slot:'amSnack', name:'Hard-boiled eggs with cucumber',     cal:180, protein:14, tags:['high-protein','low-carb'], ingredients:['eggs','cucumber','sea salt','black pepper'],    steps:'Peel hard-boiled eggs and serve alongside sliced cucumber with salt and pepper.' },
+  { slot:'amSnack', name:'Cottage cheese with berries',        cal:200, protein:20, tags:['high-protein','low-carb'], ingredients:['cottage cheese','mixed berries'],               steps:'Spoon cottage cheese into a bowl and top with fresh or thawed berries.' },
+  { slot:'amSnack', name:'Turkey roll-ups with cheese',        cal:200, protein:18, tags:['high-protein','low-carb'], ingredients:['turkey breast slices','cheddar cheese','mustard'], steps:'Lay a slice of cheese on each turkey slice, add mustard, and roll up tightly.' },
+  { slot:'amSnack', name:'Beef jerky with almonds',            cal:220, protein:20, tags:['high-protein','low-carb'], ingredients:['beef jerky','almonds'],                        steps:'Portion jerky and almonds into a small container for a portable snack.' },
+  { slot:'amSnack', name:'Tuna on rice cakes',                 cal:180, protein:20, tags:['high-protein'], ingredients:['canned tuna','rice cakes','Greek yogurt','lemon','dill'],   steps:'Mix tuna with a dollop of Greek yogurt, lemon juice, and dill. Spread on rice cakes.' },
+  { slot:'amSnack', name:'String cheese with almonds',         cal:200, protein:14, tags:['high-protein','low-carb'], ingredients:['string cheese','almonds'],                      steps:'Pair a string cheese stick with a small handful of almonds.' },
+  { slot:'amSnack', name:'Deli turkey slices with avocado',    cal:200, protein:16, tags:['high-protein','low-carb'], ingredients:['turkey breast slices','avocado','lemon','sea salt'], steps:'Fan turkey slices on a plate. Top with sliced avocado, lemon juice, and salt.' },
+  { slot:'amSnack', name:'Apple with almond butter',           cal:200, protein: 6, tags:['high-protein','plant-based'], ingredients:['apple','almond butter'],                    steps:'Core and slice the apple. Serve with 1–2 tbsp almond butter for dipping.' },
+  { slot:'amSnack', name:'Hummus with veggie sticks',          cal:180, protein: 8, tags:['plant-based'], ingredients:['hummus','carrots','celery','cucumber'],                    steps:'Cut vegetables into sticks and serve with 3–4 tbsp hummus.' },
+  { slot:'amSnack', name:'Trail mix with cashews',             cal:220, protein: 6, tags:['plant-based'], ingredients:['cashews','dried mango','pumpkin seeds','dark chocolate chips'], steps:'Combine all ingredients in a small bag or container for a ready-to-go snack.' },
+  { slot:'amSnack', name:'Edamame with sea salt',              cal:180, protein:14, tags:['plant-based','low-carb'], ingredients:['edamame','sea salt'],                            steps:'Steam or microwave edamame for 3–4 min. Toss with sea salt and serve.' },
+  { slot:'amSnack', name:'Roasted chickpeas',                  cal:190, protein:10, tags:['plant-based'], ingredients:['chickpeas','olive oil','smoked paprika','garlic powder'],   steps:'Toss drained chickpeas with oil and spices. Roast at 400°F for 25–30 min until crisp.' },
+  { slot:'amSnack', name:'Banana with peanut butter',          cal:220, protein: 8, tags:['plant-based'], ingredients:['banana','peanut butter'],                                  steps:'Slice banana and serve with 1–2 tbsp peanut butter.' },
+  { slot:'amSnack', name:'Mixed nuts and dried fruit',         cal:200, protein: 6, tags:['plant-based','low-carb'], ingredients:['mixed nuts','dried cranberries'],                steps:'Measure out a handful of mixed nuts and a small amount of dried fruit.' },
+  { slot:'amSnack', name:'Greek yogurt (plain)',               cal:130, protein:15, tags:['high-protein','low-carb'], ingredients:['Greek yogurt','cinnamon'],                     steps:'Sprinkle cinnamon over plain Greek yogurt for a quick, high-protein snack.' },
+  { slot:'amSnack', name:'Walnuts and apple slices',           cal:210, protein: 5, tags:['plant-based','low-carb'], ingredients:['walnuts','apple'],                              steps:'Quarter an apple and pair with a small handful of walnuts.' },
+  { slot:'amSnack', name:'Celery with peanut butter',          cal:180, protein: 7, tags:['plant-based','low-carb'], ingredients:['celery','peanut butter'],                       steps:'Fill celery sticks with peanut butter for a simple crunchy snack.' },
+  // ── LUNCH ─────────────────────────────────────────────────────
+  { slot:'lunch', name:'Grilled chicken rice bowl with broccoli',  cal:480, protein:42, tags:['high-protein'], ingredients:['chicken breast','brown rice','broccoli','olive oil','garlic','lemon'], steps:'Grill seasoned chicken breast. Serve over brown rice with steamed broccoli; drizzle with olive oil and lemon.' },
+  { slot:'lunch', name:'Tuna salad lettuce wraps',                  cal:350, protein:36, tags:['high-protein','low-carb'], ingredients:['canned tuna','romaine lettuce','celery','Greek yogurt','lemon','dill'], steps:'Mix tuna with Greek yogurt, celery, lemon, and dill. Spoon into lettuce leaves and roll up.' },
+  { slot:'lunch', name:'Turkey and avocado wrap',                   cal:430, protein:35, tags:['high-protein'], ingredients:['turkey breast','whole wheat tortilla','avocado','tomato','spinach','mustard'], steps:'Spread mustard on tortilla. Layer turkey, sliced avocado, tomato, and spinach; roll tightly.' },
+  { slot:'lunch', name:'Salmon and quinoa bowl',                    cal:500, protein:40, tags:['high-protein'], ingredients:['salmon','quinoa','cucumber','cherry tomatoes','lemon','olive oil'], steps:'Flake cooked salmon over a bed of quinoa. Add cucumber and tomatoes; dress with lemon and olive oil.' },
+  { slot:'lunch', name:'Lean beef and veggie stir-fry',             cal:460, protein:38, tags:['high-protein'], ingredients:['lean beef','broccoli','snap peas','soy sauce','ginger','garlic','brown rice'], steps:'Sear thin-sliced beef over high heat. Add vegetables, ginger, garlic, and soy sauce; toss for 3 min. Serve over rice.' },
+  { slot:'lunch', name:'Shrimp and mixed greens salad',             cal:380, protein:34, tags:['high-protein','low-carb'], ingredients:['shrimp','mixed greens','avocado','cherry tomatoes','olive oil','lemon'], steps:'Sauté shrimp with garlic until pink. Toss with mixed greens, avocado, and tomatoes; dress with olive oil and lemon.' },
+  { slot:'lunch', name:'Chicken Caesar salad',                      cal:400, protein:38, tags:['high-protein','low-carb'], ingredients:['chicken breast','romaine lettuce','parmesan','Caesar dressing','lemon'], steps:'Slice grilled chicken and toss with chopped romaine, parmesan, and Caesar dressing.' },
+  { slot:'lunch', name:'Egg salad sandwich on whole wheat',         cal:380, protein:28, tags:['high-protein'], ingredients:['eggs','whole wheat bread','Greek yogurt','celery','mustard','chives'], steps:'Mash hard-boiled eggs with Greek yogurt, mustard, and celery. Serve between slices of whole wheat toast.' },
+  { slot:'lunch', name:'Grilled chicken over mixed greens',         cal:380, protein:40, tags:['high-protein','low-carb'], ingredients:['chicken breast','mixed greens','avocado','cherry tomatoes','olive oil','lemon'], steps:'Season and grill chicken breast. Slice over mixed greens with avocado and tomatoes; dress with olive oil and lemon.' },
+  { slot:'lunch', name:'Tuna-stuffed avocado',                      cal:360, protein:34, tags:['high-protein','low-carb'], ingredients:['canned tuna','avocado','celery','lemon','Greek yogurt','capers'], steps:'Mix tuna with Greek yogurt, celery, capers, and lemon. Halve avocados and fill with the tuna mixture.' },
+  { slot:'lunch', name:'Salmon and cucumber roll bowl',             cal:400, protein:38, tags:['high-protein','low-carb'], ingredients:['salmon','cauliflower rice','cucumber','avocado','soy sauce','sesame seeds'], steps:'Flake cooked salmon over cauliflower rice. Top with cucumber, avocado, soy sauce, and sesame seeds.' },
+  { slot:'lunch', name:'Turkey lettuce wrap with bacon',            cal:340, protein:32, tags:['high-protein','low-carb'], ingredients:['turkey breast slices','romaine lettuce','bacon','avocado','mustard'], steps:'Cook bacon until crisp and crumble. Assemble turkey, avocado, and bacon in lettuce leaves with mustard.' },
+  { slot:'lunch', name:'Egg salad in lettuce cups',                 cal:300, protein:22, tags:['high-protein','low-carb'], ingredients:['eggs','butter lettuce','celery','Greek yogurt','mustard','dill'], steps:'Chop hard-boiled eggs and mix with yogurt, mustard, dill, and celery. Spoon into butter lettuce cups.' },
+  { slot:'lunch', name:'Steak and arugula salad',                   cal:440, protein:42, tags:['high-protein','low-carb'], ingredients:['flank steak','arugula','parmesan','cherry tomatoes','olive oil','lemon'], steps:'Sear steak to medium-rare; let rest and slice thin. Toss arugula with olive oil, lemon, and parmesan; top with steak.' },
+  { slot:'lunch', name:'Chickpea and roasted veggie bowl',          cal:460, protein:18, tags:['plant-based'], ingredients:['chickpeas','sweet potato','bell pepper','tahini','brown rice','lemon'], steps:'Roast chickpeas and vegetables at 400°F for 25 min. Serve over brown rice; drizzle tahini and lemon.' },
+  { slot:'lunch', name:'Lentil soup with sourdough',                cal:420, protein:20, tags:['plant-based'], ingredients:['lentils','carrots','celery','onion','canned tomatoes','vegetable broth','sourdough bread'], steps:'Sauté aromatics; add lentils, tomatoes, and broth. Simmer 25 min. Serve with a slice of sourdough.' },
+  { slot:'lunch', name:'Tofu stir-fry with brown rice',             cal:480, protein:24, tags:['plant-based'], ingredients:['firm tofu','broccoli','snap peas','soy sauce','ginger','garlic','brown rice'], steps:'Press and cube tofu; pan-fry until golden. Add vegetables, ginger, garlic, and soy sauce. Serve over brown rice.' },
+  { slot:'lunch', name:'Black bean and avocado burrito bowl',       cal:500, protein:20, tags:['plant-based'], ingredients:['black beans','brown rice','avocado','salsa','corn','lime','cilantro'], steps:'Heat black beans with cumin and lime. Assemble over brown rice with avocado, corn, salsa, and cilantro.' },
+  { slot:'lunch', name:'Tempeh and kale grain bowl',                cal:490, protein:26, tags:['plant-based'], ingredients:['tempeh','kale','quinoa','cherry tomatoes','olive oil','apple cider vinegar'], steps:'Cube and brown tempeh in olive oil. Massage kale with vinegar. Serve over quinoa with tomatoes.' },
+  { slot:'lunch', name:'Veggie burger with sweet potato fries',     cal:520, protein:18, tags:['plant-based'], ingredients:['veggie burger patty','whole wheat bun','lettuce','tomato','sweet potato','olive oil'], steps:'Bake sweet potato fries at 425°F for 25 min. Cook veggie patty per package. Assemble burger with lettuce and tomato.' },
+  { slot:'lunch', name:'Cobb salad with grilled chicken',           cal:450, protein:38, tags:['high-protein','low-carb'], ingredients:['chicken breast','romaine lettuce','bacon','hard-boiled eggs','avocado','blue cheese','cherry tomatoes'], steps:'Arrange all toppings over chopped romaine in rows. Serve with dressing of choice.' },
+  { slot:'lunch', name:'Mediterranean bowl with falafel',           cal:480, protein:22, tags:['plant-based'], ingredients:['falafel','quinoa','cucumber','cherry tomatoes','hummus','tzatziki','pita'], steps:'Bake falafel per package. Arrange over quinoa with cucumber, tomatoes, and a dollop each of hummus and tzatziki.' },
+  { slot:'lunch', name:'Chicken and vegetable soup with bread',     cal:420, protein:32, tags:['high-protein'], ingredients:['chicken breast','carrots','celery','onion','chicken broth','garlic','sourdough bread'], steps:'Simmer chicken with vegetables and broth until cooked through. Shred chicken; return to pot. Serve with bread.' },
+  { slot:'lunch', name:'Nicoise salad',                             cal:420, protein:30, tags:['high-protein','low-carb'], ingredients:['canned tuna','green beans','hard-boiled eggs','cherry tomatoes','olives','olive oil','Dijon mustard'], steps:'Blanch green beans; halve eggs and olives. Arrange everything on a platter; dress with Dijon vinaigrette.' },
+  { slot:'lunch', name:'BLT wrap with turkey',                      cal:420, protein:32, tags:['high-protein'], ingredients:['turkey breast slices','bacon','romaine lettuce','tomato','whole wheat tortilla','mayo'], steps:'Cook and crumble bacon. Spread a thin layer of mayo on tortilla; layer turkey, bacon, lettuce, and tomato. Roll tightly.' },
+  // ── PM SNACK ──────────────────────────────────────────────────
+  { slot:'pmSnack', name:'Apple with almond butter',              cal:220, protein: 6, tags:['high-protein','plant-based'], ingredients:['apple','almond butter'],                            steps:'Slice apple and serve with 2 tbsp almond butter.' },
+  { slot:'pmSnack', name:'Greek yogurt with walnuts',             cal:200, protein:15, tags:['high-protein','low-carb'], ingredients:['Greek yogurt','walnuts','cinnamon'],                   steps:'Top plain Greek yogurt with walnuts and cinnamon.' },
+  { slot:'pmSnack', name:'Protein shake',                         cal:200, protein:20, tags:['high-protein'], ingredients:['protein powder','almond milk'],                                  steps:'Shake or blend protein powder with almond milk.' },
+  { slot:'pmSnack', name:'Tuna on cucumber slices',               cal:160, protein:18, tags:['high-protein','low-carb'], ingredients:['canned tuna','cucumber','lemon','capers'],            steps:'Mix tuna with lemon and capers. Spoon onto thick cucumber rounds.' },
+  { slot:'pmSnack', name:'Hard-boiled egg with hot sauce',        cal: 80, protein: 6, tags:['high-protein','low-carb'], ingredients:['eggs','hot sauce'],                                   steps:'Peel a hard-boiled egg, halve it, and add a few drops of hot sauce.' },
+  { slot:'pmSnack', name:'Cheese and deli turkey slices',         cal:160, protein:16, tags:['high-protein','low-carb'], ingredients:['cheddar cheese','turkey breast slices'],              steps:'Pair thin turkey slices with cheese slices for a quick protein snack.' },
+  { slot:'pmSnack', name:'Pepperoni and mozzarella bites',        cal:200, protein:14, tags:['high-protein','low-carb'], ingredients:['turkey pepperoni','fresh mozzarella','basil'],        steps:'Thread mozzarella ball, pepperoni, and basil leaf on toothpick. Repeat for a few bites.' },
+  { slot:'pmSnack', name:'Avocado with everything bagel seasoning', cal:180, protein: 2, tags:['plant-based','low-carb'], ingredients:['avocado','everything bagel seasoning','lemon'],     steps:'Halve avocado, season generously, and eat directly from the skin.' },
+  { slot:'pmSnack', name:'Peanut butter rice cakes',              cal:200, protein: 7, tags:['plant-based'], ingredients:['rice cakes','peanut butter','banana'],                            steps:'Spread peanut butter on rice cakes and top with banana slices.' },
+  { slot:'pmSnack', name:'Roasted chickpeas',                     cal:180, protein:10, tags:['plant-based'], ingredients:['chickpeas','olive oil','smoked paprika'],                        steps:'Roast drained, dried chickpeas at 400°F with oil and spices for 25–30 min.' },
+  { slot:'pmSnack', name:'Coconut yogurt with granola',           cal:220, protein: 6, tags:['plant-based'], ingredients:['coconut yogurt','granola','mixed berries'],                      steps:'Layer coconut yogurt with granola and berries in a small bowl.' },
+  { slot:'pmSnack', name:'Celery with almond butter',             cal:160, protein: 5, tags:['plant-based','low-carb'], ingredients:['celery','almond butter'],                             steps:'Fill celery stalks with almond butter.' },
+  { slot:'pmSnack', name:'Handful of mixed nuts',                 cal:180, protein: 5, tags:['plant-based','low-carb'], ingredients:['mixed nuts'],                                         steps:'Measure out about 1 oz of mixed nuts.' },
+  { slot:'pmSnack', name:'Hummus with carrots and celery',        cal:180, protein: 8, tags:['plant-based'], ingredients:['hummus','carrots','celery'],                                     steps:'Slice carrots and celery into sticks; serve with hummus.' },
+  { slot:'pmSnack', name:'String cheese with fruit',              cal:160, protein: 8, tags:['high-protein','low-carb'], ingredients:['string cheese','apple'],                             steps:'Enjoy a string cheese alongside a small sliced apple or handful of grapes.' },
+  { slot:'pmSnack', name:'Banana with peanut butter',             cal:220, protein: 8, tags:['plant-based'], ingredients:['banana','peanut butter'],                                        steps:'Slice banana and dip in peanut butter.' },
+  { slot:'pmSnack', name:'Rice cakes with cottage cheese',        cal:180, protein:15, tags:['high-protein'], ingredients:['rice cakes','cottage cheese','chives'],                         steps:'Spread cottage cheese on rice cakes and sprinkle chives.' },
+  { slot:'pmSnack', name:'Dark chocolate and almonds',            cal:200, protein: 5, tags:['plant-based','low-carb'], ingredients:['dark chocolate','almonds'],                           steps:'Portion 1 oz dark chocolate and a small handful of almonds.' },
+  { slot:'pmSnack', name:'Edamame',                               cal:180, protein:14, tags:['plant-based','low-carb'], ingredients:['edamame','sea salt'],                                 steps:'Steam edamame for 3–4 min. Sprinkle with sea salt.' },
+  { slot:'pmSnack', name:'Kefir with berries',                    cal:160, protein:10, tags:['high-protein'], ingredients:['kefir','mixed berries'],                                        steps:'Pour kefir into a glass and stir in fresh or frozen berries.' },
+  // ── DINNER ─────────────────────────────────────────────────────
+  { slot:'dinner', name:'Baked salmon with asparagus and sweet potato', cal:520, protein:40, tags:['high-protein'], ingredients:['salmon','asparagus','sweet potato','olive oil','lemon','garlic'], steps:'Season salmon; bake at 400°F for 15 min with asparagus and cubed sweet potato. Finish with lemon.' },
+  { slot:'dinner', name:'Chicken thighs with roasted veggies',          cal:480, protein:38, tags:['high-protein'], ingredients:['chicken thighs','zucchini','bell pepper','onion','olive oil','garlic'], steps:'Season chicken thighs; roast at 425°F for 35–40 min alongside diced vegetables tossed in olive oil.' },
+  { slot:'dinner', name:'Lean beef meatballs with zucchini noodles',    cal:440, protein:36, tags:['high-protein','low-carb'], ingredients:['ground beef','zucchini','marinara sauce','parmesan','garlic'], steps:'Mix seasoned ground beef into balls; bake at 400°F for 20 min. Spiralize zucchini and toss with warm marinara and meatballs.' },
+  { slot:'dinner', name:'Shrimp and cauliflower rice stir-fry',         cal:400, protein:34, tags:['high-protein','low-carb'], ingredients:['shrimp','cauliflower rice','snap peas','sesame oil','soy sauce','ginger'], steps:'Stir-fry shrimp with vegetables and ginger in sesame oil until pink. Add cauliflower rice and soy sauce; toss 3 min.' },
+  { slot:'dinner', name:'Turkey chili with kidney beans',               cal:460, protein:40, tags:['high-protein'], ingredients:['ground turkey','canned tomatoes','kidney beans','onion','bell pepper','chili powder','cumin'], steps:'Brown turkey with onion and bell pepper. Add beans, tomatoes, and spices; simmer 20 min.' },
+  { slot:'dinner', name:'Chicken and vegetable soup',                   cal:380, protein:32, tags:['high-protein'], ingredients:['chicken breast','carrots','celery','onion','chicken broth','garlic','thyme'], steps:'Simmer chicken with vegetables and broth until cooked. Shred chicken; return to soup. Season with thyme and garlic.' },
+  { slot:'dinner', name:'Beef and broccoli rice bowl',                  cal:500, protein:40, tags:['high-protein'], ingredients:['lean beef','broccoli','soy sauce','garlic','ginger','brown rice','sesame oil'], steps:'Sear thin-sliced beef in a hot pan. Add broccoli and sauce (soy, garlic, ginger); serve over brown rice.' },
+  { slot:'dinner', name:'Baked cod with green beans and potatoes',      cal:420, protein:36, tags:['high-protein'], ingredients:['cod fillet','green beans','red potatoes','olive oil','lemon','garlic','paprika'], steps:'Roast potato wedges at 400°F for 20 min. Add seasoned cod and green beans; roast another 15 min.' },
+  { slot:'dinner', name:'Chicken tikka masala with basmati rice',       cal:520, protein:38, tags:['high-protein'], ingredients:['chicken breast','canned tomatoes','coconut milk','onion','garlic','garam masala','basmati rice'], steps:'Marinate chicken in yogurt and spices. Sear, then simmer in tomato-coconut sauce. Serve over basmati rice.' },
+  { slot:'dinner', name:'Pork tenderloin with apple and roasted sweet potato', cal:480, protein:42, tags:['high-protein'], ingredients:['pork tenderloin','apple','sweet potato','olive oil','rosemary','Dijon mustard'], steps:'Coat tenderloin with Dijon and rosemary; roast at 425°F for 25 min with cubed sweet potato and sliced apple.' },
+  { slot:'dinner', name:'Baked salmon with asparagus',                  cal:460, protein:42, tags:['high-protein','low-carb'], ingredients:['salmon','asparagus','olive oil','lemon','garlic'], steps:'Season salmon and asparagus with olive oil, garlic, salt, and pepper. Bake at 400°F for 15 min. Finish with lemon.' },
+  { slot:'dinner', name:'Chicken thighs with roasted Brussels sprouts', cal:480, protein:40, tags:['high-protein','low-carb'], ingredients:['chicken thighs','Brussels sprouts','olive oil','garlic','parmesan'], steps:'Roast chicken thighs at 425°F for 40 min. Add halved Brussels sprouts for the last 20 min; finish with parmesan.' },
+  { slot:'dinner', name:'Beef and broccoli stir-fry',                   cal:420, protein:38, tags:['high-protein','low-carb'], ingredients:['lean beef','broccoli','soy sauce','ginger','garlic','sesame oil'], steps:'Sear thin beef strips over very high heat. Add broccoli and sauce; cook 3 min. Finish with sesame oil.' },
+  { slot:'dinner', name:'Shrimp fajita bowl with cauliflower rice',     cal:380, protein:36, tags:['high-protein','low-carb'], ingredients:['shrimp','bell pepper','onion','cauliflower rice','avocado','lime','cumin'], steps:'Sauté peppers and onion with cumin until softened. Add shrimp; cook 3 min. Serve over cauliflower rice with avocado.' },
+  { slot:'dinner', name:'Pork tenderloin with green beans',             cal:460, protein:44, tags:['high-protein','low-carb'], ingredients:['pork tenderloin','green beans','olive oil','garlic','rosemary','lemon'], steps:'Sear tenderloin and finish in a 425°F oven for 20 min. Sauté green beans in olive oil with garlic.' },
+  { slot:'dinner', name:'Turkey chili (bean-free)',                     cal:400, protein:40, tags:['high-protein','low-carb'], ingredients:['ground turkey','canned tomatoes','onion','bell pepper','jalapeño','chili powder','cumin'], steps:'Brown turkey with aromatics. Add tomatoes and spices; simmer 20 min. Top with avocado and sour cream.' },
+  { slot:'dinner', name:'Zucchini boats stuffed with ground turkey',    cal:380, protein:34, tags:['high-protein','low-carb'], ingredients:['zucchini','ground turkey','onion','canned tomatoes','mozzarella','Italian seasoning'], steps:'Halve zucchini and scoop out flesh. Fill with turkey mixture; top with mozzarella. Bake at 400°F for 20 min.' },
+  { slot:'dinner', name:'Lamb chops with roasted cauliflower',          cal:480, protein:40, tags:['high-protein','low-carb'], ingredients:['lamb chops','cauliflower','olive oil','rosemary','garlic','lemon'], steps:'Season lamb with rosemary and garlic; sear 3 min per side for medium-rare. Roast cauliflower florets at 425°F for 25 min.' },
+  { slot:'dinner', name:'Lentil and sweet potato curry',                cal:520, protein:20, tags:['plant-based'], ingredients:['lentils','sweet potato','coconut milk','curry powder','onion','garlic','brown rice'], steps:'Sauté onion and garlic; add curry powder, lentils, sweet potato, and coconut milk. Simmer 25 min. Serve over rice.' },
+  { slot:'dinner', name:'Black bean tacos with mango salsa',            cal:480, protein:18, tags:['plant-based'], ingredients:['black beans','corn tortillas','mango','avocado','red onion','lime','cilantro'], steps:'Warm black beans with cumin. Dice mango, avocado, and red onion for salsa. Serve in warm tortillas.' },
+  { slot:'dinner', name:'Baked tempeh with broccoli and quinoa',        cal:500, protein:30, tags:['plant-based'], ingredients:['tempeh','broccoli','quinoa','soy sauce','garlic','sesame oil','ginger'], steps:'Marinate tempeh in soy sauce, ginger, and sesame oil. Bake at 400°F for 20 min alongside broccoli. Serve over quinoa.' },
+  { slot:'dinner', name:'Chickpea tikka masala',                        cal:510, protein:18, tags:['plant-based'], ingredients:['chickpeas','canned tomatoes','coconut milk','onion','garam masala','brown rice'], steps:'Sauté onion; add garam masala, chickpeas, tomatoes, and coconut milk. Simmer 15 min. Serve over brown rice.' },
+  { slot:'dinner', name:'Veggie-stuffed bell peppers',                  cal:440, protein:16, tags:['plant-based'], ingredients:['bell peppers','brown rice','black beans','corn','tomato sauce','cumin'], steps:'Halve peppers and fill with rice, beans, corn, and tomato sauce. Bake at 375°F for 30 min.' },
+  { slot:'dinner', name:'Tofu fried rice with edamame',                 cal:490, protein:22, tags:['plant-based'], ingredients:['firm tofu','brown rice','edamame','carrots','soy sauce','sesame oil','egg replacer'], steps:'Crumble and brown tofu; set aside. Stir-fry vegetables and rice; add tofu, edamame, and soy sauce.' },
+  { slot:'dinner', name:'Mushroom and lentil shepherd\'s pie',          cal:490, protein:20, tags:['plant-based'], ingredients:['lentils','mushrooms','onion','carrots','vegetable broth','sweet potato','olive oil'], steps:'Cook lentils with mushrooms, onion, and broth. Top with mashed sweet potato. Bake at 375°F for 20 min.' },
+  { slot:'dinner', name:'Shrimp and vegetable stir-fry over rice',      cal:460, protein:34, tags:['high-protein'], ingredients:['shrimp','broccoli','snap peas','carrots','soy sauce','ginger','brown rice'], steps:'Stir-fry shrimp with vegetables and ginger-soy sauce until pink. Serve over brown rice.' },
+  { slot:'dinner', name:'Tuna pasta with olive oil and capers',         cal:480, protein:36, tags:['high-protein'], ingredients:['canned tuna','whole wheat pasta','olive oil','capers','cherry tomatoes','garlic','parsley'], steps:'Cook pasta. Toss warm pasta with tuna, olive oil, capers, halved tomatoes, and fresh parsley.' },
+  { slot:'dinner', name:'Chicken burrito bowl',                         cal:500, protein:40, tags:['high-protein'], ingredients:['chicken breast','brown rice','black beans','avocado','salsa','corn','cheddar cheese','lime'], steps:'Season and grill chicken; slice into strips. Serve over rice with beans, avocado, corn, salsa, and cheese.' },
+  { slot:'dinner', name:'Baked chicken thigh with roasted potatoes and kale', cal:520, protein:40, tags:['high-protein'], ingredients:['chicken thighs','red potatoes','kale','olive oil','garlic','lemon','rosemary'], steps:'Toss potatoes and kale with olive oil and garlic; roast at 425°F for 20 min. Add seasoned chicken; roast 20 min more.' },
+  { slot:'dinner', name:'Pea and spinach pasta',                        cal:460, protein:18, tags:['plant-based'], ingredients:['whole wheat pasta','peas','spinach','olive oil','garlic','parmesan (or nutritional yeast)','lemon'], steps:'Cook pasta. Sauté garlic in olive oil; add peas and spinach. Toss with pasta, lemon, and parmesan.' },
+  // ── EVENING ───────────────────────────────────────────────────
+  { slot:'evening', name:'Casein protein shake',             cal:150, protein:25, tags:['high-protein','low-carb'], ingredients:['casein protein powder','almond milk'],         steps:'Mix casein with almond milk. Casein is slow-digesting and ideal before bed.' },
+  { slot:'evening', name:'Cottage cheese with cinnamon',     cal:160, protein:22, tags:['high-protein','low-carb'], ingredients:['cottage cheese','cinnamon','honey'],           steps:'Spoon cottage cheese into a small bowl. Dust with cinnamon and a tiny drizzle of honey.' },
+  { slot:'evening', name:'Greek yogurt with dark chocolate', cal:180, protein:14, tags:['high-protein','low-carb'], ingredients:['Greek yogurt','dark chocolate chips'],         steps:'Stir a few dark chocolate chips into plain Greek yogurt.' },
+  { slot:'evening', name:'Warm herbal tea with almonds',     cal:120, protein: 4, tags:['plant-based','low-carb'], ingredients:['chamomile tea','almonds'],                      steps:'Brew chamomile tea and enjoy with a small handful of almonds.' },
+  { slot:'evening', name:'String cheese with a small apple', cal:160, protein: 8, tags:['high-protein'], ingredients:['string cheese','apple'],                                  steps:'Pair a string cheese with half an apple for a light protein-plus-fiber snack.' },
+  { slot:'evening', name:'Peanut butter on rice cake',       cal:160, protein: 5, tags:['plant-based'], ingredients:['rice cakes','peanut butter'],                              steps:'Spread a thin layer of peanut butter on a rice cake.' },
+  { slot:'evening', name:'Warm milk with honey',             cal:140, protein: 8, tags:['high-protein'], ingredients:['milk','honey'],                                           steps:'Warm milk gently and stir in honey. A traditional sleep-supporting combination.' },
+  { slot:'evening', name:'Kefir drink',                      cal:130, protein:10, tags:['high-protein','low-carb'], ingredients:['kefir'],                                       steps:'Drink plain kefir; it is high in casein protein and probiotics.' },
+  { slot:'evening', name:'Hard-boiled egg with hot sauce',   cal: 80, protein: 6, tags:['high-protein','low-carb'], ingredients:['eggs','hot sauce'],                            steps:'Peel a hard-boiled egg and add a few drops of hot sauce.' },
+  { slot:'evening', name:'Edamame',                          cal:180, protein:14, tags:['plant-based','low-carb'], ingredients:['edamame','sea salt'],                           steps:'Steam edamame and sprinkle with sea salt for a light plant-based protein hit.' },
+];
+
+function filterMeals(slot, profile) {
+  const dietStyle  = profile.dietStyle || 'high-protein';
+  const avoidRaw   = (profile.avoidFoods || '').toLowerCase();
+  const avoidTerms = avoidRaw.split(',').map(s => s.trim()).filter(Boolean);
+  const calsPerMeal = profile.caloriesTarget
+    ? Math.round(profile.caloriesTarget / (profile.mealsPerDay || 4)) : null;
+
+  let pool = MEALS.filter(m => m.slot === slot);
+
+  // Diet style: prefer meals tagged with selected style
+  if (dietStyle !== 'high-protein') {
+    const styled = pool.filter(m => m.tags.includes(dietStyle));
+    if (styled.length >= 3) pool = styled;
+  }
+
+  // Avoid foods: remove any meal whose ingredients overlap with avoided terms
+  if (avoidTerms.length) {
+    const safe = pool.filter(m => {
+      const ings = m.ingredients.map(i => i.toLowerCase());
+      return !avoidTerms.some(avoid => ings.some(ing => ing.includes(avoid)));
+    });
+    if (safe.length >= 2) pool = safe;
+  }
+
+  // Calorie range: ±180 cal of per-meal target
+  if (calsPerMeal) {
+    const lo = calsPerMeal - 180, hi = calsPerMeal + 180;
+    const inRange = pool.filter(m => m.cal >= lo && m.cal <= hi);
+    if (inRange.length >= 2) pool = inRange;
+  }
+
+  return pool;
 }
 
 function generateWeeklyMenu(profile) {
-  const meals = profile.mealsPerDay || 4;
+  const mealCount = profile.mealsPerDay || 4;
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const dow = today.getDay();
   const monday = new Date(today);
   monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
 
   const dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-  const lib = mealLibrary(profile.dietStyle || 'high-protein');
 
   let slots;
-  if (meals === 3) slots = ['breakfast', 'lunch', 'dinner'];
-  else if (meals === 4) slots = ['breakfast', 'lunch', 'pmSnack', 'dinner'];
-  else if (meals === 5) slots = ['breakfast', 'amSnack', 'lunch', 'pmSnack', 'dinner'];
+  if (mealCount === 3) slots = ['breakfast', 'lunch', 'dinner'];
+  else if (mealCount === 4) slots = ['breakfast', 'lunch', 'pmSnack', 'dinner'];
+  else if (mealCount === 5) slots = ['breakfast', 'amSnack', 'lunch', 'pmSnack', 'dinner'];
   else slots = ['breakfast', 'amSnack', 'lunch', 'pmSnack', 'dinner', 'evening'];
 
-  const slotLabel = { breakfast: 'breakfast', amSnack: 'am snack', lunch: 'lunch', pmSnack: 'pm snack', dinner: 'dinner', evening: 'evening' };
+  const slotLabel = { breakfast:'breakfast', amSnack:'am snack', lunch:'lunch', pmSnack:'pm snack', dinner:'dinner', evening:'evening' };
+
+  // Build filtered pools per slot once (avoids re-filtering 7x per slot)
+  const pools = {};
+  slots.forEach(slot => { pools[slot] = filterMeals(slot, profile); });
+
+  // Track used meal names across the week to maximise variety
+  const usedNames = new Set();
 
   return dayNames.map((dayName, di) => {
     const d = new Date(monday); d.setDate(monday.getDate() + di);
     const date = d.toISOString().split('T')[0];
     const dayMeals = slots.map((slot, mi) => {
-      const options = lib[slot] || lib.pmSnack;
-      const meal = options[(di * 3 + mi * 2) % options.length];
-      return { type: slotLabel[slot] || slot, name: meal.name, cal: meal.cal, ingredients: meal.ing };
+      const options = pools[slot] || [];
+      if (!options.length) return { type: slotLabel[slot] || slot, name: 'No meals available', cal: 0, protein: 0, ingredients: [], steps: '' };
+      // Prefer an unused meal; fall back to full pool if all used
+      let pick = options.find(m => !usedNames.has(slot + ':' + m.name));
+      if (!pick) pick = options[(di * 7 + mi * 3) % options.length];
+      usedNames.add(slot + ':' + pick.name);
+      return { type: slotLabel[slot] || slot, name: pick.name, cal: pick.cal, protein: pick.protein, ingredients: pick.ingredients, steps: pick.steps };
     });
     return { dayIndex: di, dayName, date, meals: dayMeals };
   });
@@ -1508,30 +1598,47 @@ function renderMenu() {
   const skips = getSkippedMeals();
   const today = todayISO();
   const first = state.weeklyMenu[0]?.date || '';
-  const last = state.weeklyMenu[6]?.date || '';
+  const last  = state.weeklyMenu[6]?.date || '';
   document.getElementById('menuWeekRange').textContent = first && last ? `${formatDate(first)} – ${formatDate(last)}` : '';
+
+  // Build reverse type→slot map for filter lookups
+  const typeToSlot = { 'am snack':'amSnack', 'pm snack':'pmSnack', breakfast:'breakfast', lunch:'lunch', dinner:'dinner', evening:'evening' };
 
   grid.innerHTML = state.weeklyMenu.map(day => {
     const isToday = day.date === today;
     const mealsHtml = day.meals.map((meal, mi) => {
-      const key = `${day.dayIndex}-${mi}`;
+      const key     = `${day.dayIndex}-${mi}`;
       const skipped = skips.has(key);
-      const swapping = activeSwapKey === key;
+      const swapping  = activeSwapKey === key;
+      const expanded  = expandedMealKey === key;
+
       let swapHtml = '';
-      if (swapping) {
-        const lib = mealLibrary(state.profile?.dietStyle || 'high-protein');
-        const slotKeys = { 'am snack': 'amSnack', 'pm snack': 'pmSnack', breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner', evening: 'evening' };
-        const slotKey = slotKeys[meal.type] || meal.type;
-        const options = lib[slotKey] || lib.pmSnack;
+      if (swapping && state.profile) {
+        const slotKey = typeToSlot[meal.type] || meal.type;
+        const options = filterMeals(slotKey, state.profile);
         const opts = options.map((m, i) => `<option value="${i}"${m.name === meal.name ? ' selected' : ''}>${m.name}</option>`).join('');
         swapHtml = `<div class="meal-swap-wrap"><select class="meal-swap-select" onchange="confirmSwap(${day.dayIndex},${mi},this.value,event)" onclick="event.stopPropagation()">${opts}</select></div>`;
       }
-      return `<div class="meal-row${skipped ? ' skipped' : ''}">
-        <div class="meal-row-top">
+
+      let recipeHtml = '';
+      if (expanded && meal.ingredients?.length) {
+        const ings  = meal.ingredients.map(i => `<span class="recipe-ing">${i}</span>`).join('');
+        const steps = meal.steps ? `<div class="recipe-steps">${meal.steps}</div>` : '';
+        recipeHtml = `<div class="recipe-card" onclick="event.stopPropagation()">
+          <div class="recipe-macros">${meal.cal ? meal.cal + ' cal' : ''}${meal.protein ? ' · ' + meal.protein + 'g protein' : ''}</div>
+          <div class="recipe-ings">${ings}</div>
+          ${steps}
+        </div>`;
+      }
+
+      const calLabel = meal.cal ? `${meal.cal} cal · ${meal.protein ?? '?'}g P` : (meal.cal || '');
+
+      return `<div class="meal-row${skipped ? ' skipped' : ''}${expanded ? ' expanded' : ''}">
+        <div class="meal-row-top" onclick="toggleRecipe(${day.dayIndex},${mi},event)">
           <div class="meal-row-info">
             <div class="meal-type">${meal.type}</div>
             <div class="meal-name">${meal.name}</div>
-            <div class="meal-cal">${meal.cal}</div>
+            <div class="meal-cal">${calLabel}</div>
           </div>
           <div class="meal-actions">
             <button class="meal-btn" title="swap" onclick="swapMeal(${day.dayIndex},${mi},event)">
@@ -1541,7 +1648,7 @@ function renderMenu() {
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>
             </button>
           </div>
-        </div>${swapHtml}
+        </div>${swapHtml}${recipeHtml}
       </div>`;
     }).join('');
     return `<div class="day-card${isToday ? ' today' : ''}">
@@ -1556,23 +1663,30 @@ function renderMenu() {
   document.getElementById('shopPanel').style.display = '';
 }
 
+function toggleRecipe(dayIndex, mealIndex, event) {
+  event && event.stopPropagation();
+  const key = `${dayIndex}-${mealIndex}`;
+  expandedMealKey = expandedMealKey === key ? null : key;
+  renderMenu();
+}
+
 function swapMeal(dayIndex, mealIndex, event) {
   event && event.stopPropagation();
   const key = `${dayIndex}-${mealIndex}`;
   activeSwapKey = activeSwapKey === key ? null : key;
+  expandedMealKey = null;
   renderMenu();
 }
 
 function confirmSwap(dayIndex, mealIndex, optionIndex, event) {
   event && event.stopPropagation();
-  const day = state.weeklyMenu[dayIndex]; if (!day) return;
-  const meal = day.meals[mealIndex]; if (!meal) return;
-  const lib = mealLibrary(state.profile?.dietStyle || 'high-protein');
-  const slotKeys = { 'am snack': 'amSnack', 'pm snack': 'pmSnack', breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner', evening: 'evening' };
-  const slotKey = slotKeys[meal.type] || meal.type;
-  const options = lib[slotKey] || lib.pmSnack;
-  const chosen = options[Number(optionIndex)]; if (!chosen) return;
-  day.meals[mealIndex] = { type: meal.type, name: chosen.name, cal: chosen.cal, ingredients: chosen.ing };
+  const day  = state.weeklyMenu[dayIndex]; if (!day) return;
+  const meal = day.meals[mealIndex];       if (!meal) return;
+  const typeToSlot = { 'am snack':'amSnack', 'pm snack':'pmSnack', breakfast:'breakfast', lunch:'lunch', dinner:'dinner', evening:'evening' };
+  const slotKey = typeToSlot[meal.type] || meal.type;
+  const options = filterMeals(slotKey, state.profile || {});
+  const chosen  = options[Number(optionIndex)]; if (!chosen) return;
+  day.meals[mealIndex] = { type: meal.type, name: chosen.name, cal: chosen.cal, protein: chosen.protein, ingredients: chosen.ingredients, steps: chosen.steps };
   activeSwapKey = null;
   saveWeeklyMenu().catch(() => {});
   renderMenu(); renderShoppingList();
