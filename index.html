@@ -187,13 +187,66 @@ nav.tabs {
 .today-meal-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; border-top: 1px solid var(--border); }
 .today-meal-name { font-size: 12px; color: var(--cream); line-height: 1.4; }
 .shop-item-qty { font-family: var(--mono); font-size: 9px; color: var(--amber-dim); margin-left: auto; white-space: nowrap; padding-left: 8px; }
-.meal-swap-wrap { margin-top: 6px; }
-.meal-swap-select {
-  font-family: var(--mono); font-size: 10px;
-  background: var(--card2); border: 1px solid var(--amber);
-  color: var(--cream); border-radius: var(--radius); padding: 5px 8px;
-  width: 100%; cursor: pointer;
+/* ── Swap Modal ── */
+.swap-overlay {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(0,0,0,0.65); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-end; justify-content: center;
 }
+.swap-sheet {
+  background: var(--card); border-radius: 12px 12px 0 0;
+  width: 100%; max-width: 560px; max-height: 82vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+@media (min-width: 600px) {
+  .swap-overlay { align-items: center; }
+  .swap-sheet   { border-radius: 12px; max-height: 74vh; }
+}
+.swap-sheet-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.swap-sheet-title { font-family: var(--serif); font-size: 18px; color: var(--cream); }
+.swap-close {
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  padding: 4px; border-radius: 4px; line-height: 1;
+}
+.swap-close:hover { color: var(--cream); }
+.swap-tabs {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.swap-tab {
+  flex: 1; background: none; border: none; cursor: pointer;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted); padding: 10px 0; border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.swap-tab.active { color: var(--amber); border-bottom-color: var(--amber); }
+.swap-tab-panel { padding: 20px 18px; overflow-y: auto; flex: 1; }
+.swap-hint { font-size: 13px; color: var(--muted); margin: 0 0 16px; line-height: 1.6; }
+.swap-choose-list { display: flex; flex-direction: column; gap: 1px; }
+.swap-list-item {
+  padding: 10px 12px; border-radius: var(--radius); cursor: pointer;
+  transition: background 0.12s; border: 1px solid transparent;
+}
+.swap-list-item:hover { background: var(--card2); border-color: var(--border); }
+.swap-list-item.current { border-color: var(--border2); background: var(--amber-bg); }
+.swap-list-name { font-size: 13px; color: var(--cream); line-height: 1.4; }
+.swap-list-meta { font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 2px; }
+.swap-current-badge {
+  font-family: var(--mono); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--amber); background: var(--amber-bg); border-radius: 999px; padding: 1px 6px;
+  vertical-align: middle; margin-left: 4px;
+}
+.swap-empty { font-size: 13px; color: var(--muted); padding: 8px 0; }
+.swap-form { display: flex; flex-direction: column; gap: 14px; }
+.swap-tag-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.swap-tag-option {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  color: var(--muted); cursor: pointer;
+}
+.swap-tag-option input { accent-color: var(--amber); }
 /* ── Shopping List ── */
 .shop-panel {
   background: var(--card); border: 1px solid var(--border);
@@ -685,6 +738,70 @@ nav.tabs {
 
 </div><!-- /appShell -->
 
+<!-- Swap Modal -->
+<div id="swapModal" class="swap-overlay" style="display:none" onclick="closeSwapModal()">
+  <div class="swap-sheet" onclick="event.stopPropagation()">
+    <div class="swap-sheet-head">
+      <span id="swapModalTitle" class="swap-sheet-title">swap meal</span>
+      <button class="swap-close" onclick="closeSwapModal()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="2" x2="14" y2="14"/><line x1="14" y1="2" x2="2" y2="14"/></svg>
+      </button>
+    </div>
+    <div class="swap-tabs">
+      <button id="swapTabBtn-random" class="swap-tab active" onclick="setSwapTab('random')">random</button>
+      <button id="swapTabBtn-choose" class="swap-tab" onclick="setSwapTab('choose')">choose</button>
+      <button id="swapTabBtn-custom" class="swap-tab" onclick="setSwapTab('custom')">add custom</button>
+    </div>
+
+    <div id="swapTab-random" class="swap-tab-panel">
+      <p class="swap-hint">Picks a meal matched to your diet style, calorie target, and avoided foods.</p>
+      <button class="btn btn-primary" onclick="pickRandomMeal()">pick one for me</button>
+    </div>
+
+    <div id="swapTab-choose" class="swap-tab-panel" style="display:none">
+      <div id="swapChooseList" class="swap-choose-list">
+        <div class="swap-empty">loading meals…</div>
+      </div>
+    </div>
+
+    <div id="swapTab-custom" class="swap-tab-panel" style="display:none">
+      <div class="swap-form">
+        <div class="form-group">
+          <label class="form-label">meal name</label>
+          <input class="form-input" id="customMealName" placeholder="e.g. My protein bowl">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">calories</label>
+            <input class="form-input" type="number" id="customMealCal" placeholder="450">
+          </div>
+          <div class="form-group">
+            <label class="form-label">protein (g)</label>
+            <input class="form-input" type="number" id="customMealProtein" placeholder="35">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ingredients <span style="color:var(--muted);font-weight:400">(comma-separated)</span></label>
+          <input class="form-input" id="customMealIngredients" placeholder="chicken breast, rice, broccoli">
+        </div>
+        <div class="form-group">
+          <label class="form-label">prep notes</label>
+          <textarea class="form-textarea" id="customMealSteps" placeholder="Brief instructions…" style="min-height:60px"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">diet tags</label>
+          <div class="swap-tag-row">
+            <label class="swap-tag-option"><input class="tag-check" type="checkbox" value="high-protein"> high-protein</label>
+            <label class="swap-tag-option"><input class="tag-check" type="checkbox" value="low-carb"> low-carb</label>
+            <label class="swap-tag-option"><input class="tag-check" type="checkbox" value="plant-based"> plant-based</label>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="width:100%" onclick="saveCustomMeal()">save to library + use this meal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <footer class="tool-footer">
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="24" height="24" aria-hidden="true">
     <path fill="#e8e0d4" d="M446.29,210.89c-1.26-8.84-3.35-17.69-5.6-26.64-2.73-10.85-7.19-18.66-11.72-28.49l-2.55-5.53c-3.92-8.51-9.91-16.01-15.83-23.1l-6.27-7.51c-9.67-11.59-20.38-22.18-32.82-29.86l-10.45-6.45c-10.24-6.32-18.96-10.16-29.76-14.34l-8.9-3.45c-7.34-2.85-26.38-6.88-34.77-8.14l-5.84-.88c-4.25-.64-27.08-1.56-30.86-1.18l-9.9,1.02c-3.27.34-6.09.15-9.43.65-7.96,1.2-15.16,2.51-23.1,4.58-33.89,8.83-65.63,25.91-91.72,49.95-19.66,18.11-36.9,38.76-46.99,63.47l-3.96,9.69c-6,14.67-11.83,29.9-13.21,45.74l-1,11.56c-.36,4.14-1.28,7.56-1.15,11.64l.33,10.42c.27,8.5-.4,17.29,2.28,25.64.88,2.74.68,4.99,1.08,7.82,1.08,7.56,4.07,14.51,5.87,21.8,1.28,5.18,3.83,9.55,5.82,14.38,2.72,6.63,5.57,12.88,9.4,18.83,2.19,3.4,3.65,7.11,6.27,10.26,2.07,2.5,3.8,5.32,5.68,7.96,1.13,1.6,2.26,3.21,3.49,4.74.75.94.85,1.01,1.8.18.89-.79,1.48-1.76,2.23-2.67,2.19-2.67,5.9-3.71,8.11-6.36.64-.77,1.15-1.67,1.98-2.22.85-.57,1.91-.69,2.83-1.11.36-.17,3.94-4.11,3.88-4.19-4.47-6-12.4-17.25-13.71-19.75l-6.54-12.43c-6.6-12.55-10.97-30.5-13.72-44.75.82,4.24-1.69-16.54-1.63-13.7-.42-8.78.67-25.93,2.24-34.63l2.86-15.85c.62-3.43,2.24-7.67,3.76-10.96,1.02-2.19.94-3.72,1.57-5.85.07-.23,5.06-12.72,5.19-12.89,3.45-4.74,5.46-9.24,8.04-14.46-.33.66,10.74-17.07,9.43-15.51l10.86-12.96c1.34-1.6,3.16-2.26,3.75-4.76.51-2.11,3.77-2.68,4.91-4.25,2.23-3.07,5.3-4.79,7.94-7.41,2.03-2.01,3.52-3.95,6-5.64,1.67-1.13,2.28-4.09,5.49-3.23,1.01-1.54,1.33-2.99,2.72-3.64,11.66-5.45,14.05-10.05,13.4-9.7.43-.24.87.19,1.8.69,4.78-4.03,10.48-5.93,16.16-8.37.55-.24,1.05-2.14,1.91-2.12.45.01.99.58,1.72.45,3.49-2.95,9.84-4.32,11.65-4.96l12.25-4.35,7.44-1.69c4.21-.96,11.15-2.26,15.42-2.89,2.56-.38,4.37-1.37,6.8-1.88,2.09-.44,5.01,1.09,6.74-1.42.97.97,1.83,1.62,2.43,1.57.44-.04,1.61-1.65,2.04-1.49,3.54,1.31,7.31,1.64,11.02-.12,1.91-.91,3.83,1.54,4.94,1.11,2.06-.79,3.26-.49,5.05-.38l4.78.27c1.38.08,12.88,1.53,14.08,1.91l5.07,1.59c.53.17,22.32,4.26,27.05,7.93,5.26,4.08,9.61.46,13.59,6.1-.71-1,8.72,6.71,10.36,4.91,2.98,3.35,6.52,6.33,11.01,7.51,2.98.78,3.72,4.03,5.85,5.49,5.08,3.48,9,7.53,13.43,11.59,1.4,1.29,2.39,1.72,3.7,3.89,4.05,6.71,12.28,10.53,14.73,18.25.72,2.28,1.2,4.66,2.27,6.79.93,1.86,2.28,3.49,3.12,5.39.56,1.28.88,2.66,1.19,4.02,0,1.78.9,3.95,1.3,5.69.46,2.02.92,4.03,1.38,6.05.79,3.44,1.99,6.73,2.92,10.12.87,3.18,2.36,6.15,3.29,9.34.83,2.83,1.28,5.76,1.72,8.68,1.64,11.01,3.5,22.16,1.94,33.24-.21,1.46-.42,5.24,1.7,5.39.47-1.22.6-2.64.74-3.94.05-.5.1-1,.14-1.5.29-3.46.79-6.91.9-10.38.1-2.92.93-6.57.45-9.4-.1-.61-.33-1.18-.55-1.76-.51-1.31-1.02-2.62-1.53-3.92-.25-.64-.5-1.3-.56-1.98-.06-.71.09-1.42.14-2.13.36-5.42-1.85-11.64-2.97-16.91-1.22-5.75-2.54-11.48-3.89-17.2-.8-3.37-1.62-6.73-2.44-10.1-.44-1.8-.76-3.7-1.35-5.46-.51-1.51-1.31-2.77-1.03-4.46.28.36.43.81.58,1.24,1.22,3.63,2.43,7.26,3.65,10.89.66,1.97,1.32,3.96,1.42,6.03.03.76,1.26,2.46,1.43,3.2.38,1.55.26,3.66,1.04,5.06,1.67,2.99,1.04,4.84,1.7,8.2.57,2.93,2.2,5.57,2.78,8.5.36,1.85.28,3.76.46,5.64.24,2.53.93,4.97,1.47,7.44.57,2.6.6,5.13.86,7.76.23,2.35.89,4.18,1.63,6.43,1.1,3.36.79,7.02.17,10.41,1.46-1.66,3.59-2.15,5.32-3.43,2.01-1.49,3.06-4.04,5.13-5.45.73-.49,1.56-.84,2.21-1.42.54-.48.94-1.11,1.38-1.68,1.75-2.25,4.53-3.58,6.69-5.41,1.87-1.58,3.34-3.42,5.18-5.03-.17-1.36-.59-2.32-.73-3.31Z"/>
@@ -1021,8 +1138,9 @@ const CM_PER_INCH = 2.54;
 
 let storage = null;
 let state = { profile: null, weeklyMenu: [], history: [] };
-let activeSwapKey = null;
 let expandedMealKey = null;
+let swapModalState  = null;   // { dayIndex, mealIndex, slot }
+let mealLibraryCache = null;  // Array<meal> loaded from vault, null until loaded
 let _toastTimer = null;
 
 /* ──────────────────────────────────────────────────────────────
@@ -1136,7 +1254,68 @@ function signOutApp() {
    ────────────────────────────────────────────────────────────── */
 async function loadAll() {
   await Promise.all([loadProfile(), loadWeeklyMenu(), loadHistory()]);
+  loadMealLibrary(); // background — don't block render
   renderAll();
+}
+
+/* ──────────────────────────────────────────────────────────────
+   MEAL LIBRARY — vault persistence
+   ────────────────────────────────────────────────────────────── */
+function mealSlug(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+async function loadMealLibrary() {
+  if (mealLibraryCache) return mealLibraryCache;
+  try {
+    await storage.ensureFolder(`${BASE}/Meals`);
+    const files = await storage.listFiles(`${BASE}/Meals`);
+    const mdFiles = (files || []).filter(f => f.name?.endsWith('.md'));
+    if (!mdFiles.length) {
+      await seedMealLibrary();
+      mealLibraryCache = MEALS.map(m => ({ ...m }));
+      return mealLibraryCache;
+    }
+    const raws = await Promise.all(mdFiles.map(f => storage.readFile(`${BASE}/Meals/${f.name}`)));
+    mealLibraryCache = raws.map(raw => {
+      if (!raw) return null;
+      const m = parseFrontmatter(raw);
+      return {
+        name:        m.name || '',
+        slot:        m.slot || 'dinner',
+        cal:         Number(m.cal) || 0,
+        protein:     Number(m.protein) || 0,
+        tags:        Array.isArray(m.tags) ? m.tags : (m.tags ? [m.tags] : []),
+        ingredients: Array.isArray(m.ingredients) ? m.ingredients : [],
+        steps:       m.steps || '',
+      };
+    }).filter(m => m && m.name);
+  } catch {
+    mealLibraryCache = MEALS.map(m => ({ ...m }));
+  }
+  return mealLibraryCache;
+}
+
+async function seedMealLibrary() {
+  try {
+    await Promise.all(MEALS.map(meal => {
+      const fm = serializeFrontmatter({
+        name: meal.name, slot: meal.slot, cal: meal.cal, protein: meal.protein,
+        tags: meal.tags, ingredients: meal.ingredients, steps: meal.steps,
+      });
+      return storage.writeFile(`${BASE}/Meals/${mealSlug(meal.name)}.md`, fm);
+    }));
+  } catch {}
+}
+
+async function saveMealToVault(meal) {
+  try {
+    const fm = serializeFrontmatter({
+      name: meal.name, slot: meal.slot, cal: meal.cal, protein: meal.protein,
+      tags: meal.tags, ingredients: meal.ingredients, steps: meal.steps,
+    });
+    await storage.writeFile(`${BASE}/Meals/${mealSlug(meal.name)}.md`, fm);
+  } catch {}
 }
 
 function renderAll() {
@@ -1542,7 +1721,8 @@ function filterMeals(slot, profile) {
   const calsPerMeal = profile.caloriesTarget
     ? Math.round(profile.caloriesTarget / (profile.mealsPerDay || 4)) : null;
 
-  let pool = MEALS.filter(m => m.slot === slot);
+  const source = mealLibraryCache || MEALS;
+  let pool = source.filter(m => m.slot === slot);
 
   // Diet style: prefer meals tagged with selected style
   if (dietStyle !== 'high-protein') {
@@ -1660,19 +1840,10 @@ function renderMenu() {
     const isToday  = day.date === today;
     const logged   = getLoggedMeals(day.date);
     const mealsHtml = day.meals.map((meal, mi) => {
-      const key     = `${day.dayIndex}-${mi}`;
-      const skipped = skips.has(key);
-      const isLogged  = logged.has(String(mi));
-      const swapping  = activeSwapKey === key;
-      const expanded  = expandedMealKey === key;
-
-      let swapHtml = '';
-      if (swapping && state.profile) {
-        const slotKey = typeToSlot[meal.type] || meal.type;
-        const options = filterMeals(slotKey, state.profile);
-        const opts = options.map((m, i) => `<option value="${i}"${m.name === meal.name ? ' selected' : ''}>${m.name}</option>`).join('');
-        swapHtml = `<div class="meal-swap-wrap"><select class="meal-swap-select" onchange="confirmSwap(${day.dayIndex},${mi},this.value,event)" onclick="event.stopPropagation()">${opts}</select></div>`;
-      }
+      const key      = `${day.dayIndex}-${mi}`;
+      const skipped  = skips.has(key);
+      const isLogged = logged.has(String(mi));
+      const expanded = expandedMealKey === key;
 
       let recipeHtml = '';
       if (expanded && meal.ingredients?.length) {
@@ -1705,7 +1876,7 @@ function renderMenu() {
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>
             </button>
           </div>
-        </div>${swapHtml}${recipeHtml}
+        </div>${recipeHtml}
       </div>`;
     }).join('');
     return `<div class="day-card${isToday ? ' today' : ''}">
@@ -1727,32 +1898,96 @@ function toggleRecipe(dayIndex, mealIndex, event) {
   renderMenu();
 }
 
-function swapMeal(dayIndex, mealIndex, event) {
-  event && event.stopPropagation();
-  const key = `${dayIndex}-${mealIndex}`;
-  activeSwapKey = activeSwapKey === key ? null : key;
-  expandedMealKey = null;
-  renderMenu();
-}
+const TYPE_TO_SLOT = { 'am snack':'amSnack', 'pm snack':'pmSnack', breakfast:'breakfast', lunch:'lunch', dinner:'dinner', evening:'evening' };
 
-function confirmSwap(dayIndex, mealIndex, optionIndex, event) {
+function swapMeal(dayIndex, mealIndex, event) {
   event && event.stopPropagation();
   const day  = state.weeklyMenu[dayIndex]; if (!day) return;
   const meal = day.meals[mealIndex];       if (!meal) return;
-  const typeToSlot = { 'am snack':'amSnack', 'pm snack':'pmSnack', breakfast:'breakfast', lunch:'lunch', dinner:'dinner', evening:'evening' };
-  const slotKey = typeToSlot[meal.type] || meal.type;
-  const options = filterMeals(slotKey, state.profile || {});
-  const chosen  = options[Number(optionIndex)]; if (!chosen) return;
-  day.meals[mealIndex] = { type: meal.type, name: chosen.name, cal: chosen.cal, protein: chosen.protein, ingredients: chosen.ingredients, steps: chosen.steps };
-  activeSwapKey = null;
+  swapModalState = { dayIndex, mealIndex, slot: TYPE_TO_SLOT[meal.type] || meal.type, mealType: meal.type };
+  openSwapModal();
+}
+
+function applySwap(chosen) {
+  if (!swapModalState) return;
+  const { dayIndex, mealIndex, mealType } = swapModalState;
+  const day = state.weeklyMenu[dayIndex]; if (!day) return;
+  day.meals[mealIndex] = { type: mealType, name: chosen.name, cal: chosen.cal, protein: chosen.protein, ingredients: chosen.ingredients, steps: chosen.steps };
+  closeSwapModal();
   saveWeeklyMenu().catch(() => {});
   renderMenu(); renderShoppingList();
   showToast('meal updated');
 }
 
-document.addEventListener('click', () => {
-  if (activeSwapKey !== null) { activeSwapKey = null; renderMenu(); }
-});
+/* ──────────────────────────────────────────────────────────────
+   SWAP MODAL
+   ────────────────────────────────────────────────────────────── */
+function openSwapModal() {
+  const modal = document.getElementById('swapModal'); if (!modal) return;
+  const meal  = state.weeklyMenu[swapModalState.dayIndex]?.meals[swapModalState.mealIndex];
+  document.getElementById('swapModalTitle').textContent = `swap ${meal?.type || 'meal'}`;
+  modal.style.display = 'flex';
+  setSwapTab('random');
+  // Load library then populate choose tab
+  loadMealLibrary().then(() => { if (swapModalState) renderSwapList(); });
+}
+
+function closeSwapModal() {
+  swapModalState = null;
+  const modal = document.getElementById('swapModal'); if (modal) modal.style.display = 'none';
+}
+
+function setSwapTab(name) {
+  ['random','choose','custom'].forEach(t => {
+    document.getElementById(`swapTab-${t}`).style.display      = t === name ? '' : 'none';
+    document.getElementById(`swapTabBtn-${t}`).classList.toggle('active', t === name);
+  });
+  if (name === 'choose' && swapModalState) renderSwapList();
+}
+
+function pickRandomMeal() {
+  if (!swapModalState) return;
+  const pool = filterMeals(swapModalState.slot, state.profile || {});
+  if (!pool.length) { showToast('no matching meals found', 'error'); return; }
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  applySwap(pick);
+}
+
+function renderSwapList() {
+  const el = document.getElementById('swapChooseList'); if (!el || !swapModalState) return;
+  const currentMeal = state.weeklyMenu[swapModalState.dayIndex]?.meals[swapModalState.mealIndex];
+  const pool = filterMeals(swapModalState.slot, state.profile || {});
+  if (!pool.length) { el.innerHTML = '<div class="swap-empty">no matching meals for your filters.</div>'; return; }
+  el.innerHTML = pool.map((m, i) => {
+    const isCurrent = m.name === currentMeal?.name;
+    return `<div class="swap-list-item${isCurrent ? ' current' : ''}" onclick="applySwap(swapListPool[${i}])">
+      <div class="swap-list-name">${m.name}${isCurrent ? ' <span class="swap-current-badge">current</span>' : ''}</div>
+      <div class="swap-list-meta">${m.cal} cal · ${m.protein}g P</div>
+    </div>`;
+  }).join('');
+  // Attach pool to window so onclick can reference it
+  window.swapListPool = pool;
+}
+
+async function saveCustomMeal() {
+  if (!swapModalState) return;
+  const name   = document.getElementById('customMealName').value.trim();
+  const cal    = Number(document.getElementById('customMealCal').value) || 0;
+  const protein = Number(document.getElementById('customMealProtein').value) || 0;
+  const ingRaw = document.getElementById('customMealIngredients').value;
+  const steps  = document.getElementById('customMealSteps').value.trim();
+  const tags   = [...document.querySelectorAll('#swapModal .tag-check:checked')].map(c => c.value);
+  if (!name) { showToast('meal name required', 'error'); return; }
+  const ingredients = ingRaw.split(',').map(s => s.trim()).filter(Boolean);
+  const meal = { name, slot: swapModalState.slot, cal, protein, tags: tags.length ? tags : ['high-protein'], ingredients, steps };
+  // Add to cache
+  if (!mealLibraryCache) mealLibraryCache = [...MEALS];
+  mealLibraryCache.push(meal);
+  // Save to vault
+  await saveMealToVault(meal);
+  applySwap(meal);
+  showToast('meal saved to your library');
+}
 
 function getSkippedMeals() {
   try { return new Set(JSON.parse(localStorage.getItem(SKIPS_KEY) || '[]')); } catch { return new Set(); }
