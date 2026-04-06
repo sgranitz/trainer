@@ -180,6 +180,13 @@ nav.tabs {
 }
 .meal-btn:hover { color: var(--amber); }
 .meal-btn.skip-active { color: var(--red); }
+.meal-btn.log-active { color: var(--green); }
+.today-meals-box { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px; }
+.today-meals-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.today-meals-totals { font-family: var(--mono); font-size: 10px; color: var(--amber); letter-spacing: 0.06em; }
+.today-meal-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; border-top: 1px solid var(--border); }
+.today-meal-name { font-size: 12px; color: var(--cream); line-height: 1.4; }
+.shop-item-qty { font-family: var(--mono); font-size: 9px; color: var(--amber-dim); margin-left: auto; white-space: nowrap; padding-left: 8px; }
 .meal-swap-wrap { margin-top: 6px; }
 .meal-swap-select {
   font-family: var(--mono); font-size: 10px;
@@ -429,7 +436,10 @@ nav.tabs {
     <div class="shop-panel" id="shopPanel" style="display:none">
       <div class="shop-header">
         <div class="shop-title">shopping list</div>
-        <button class="btn btn-ghost btn-xs" onclick="clearShopChecks()">uncheck all</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-xs" onclick="sendToKeep()">→ the keep</button>
+          <button class="btn btn-ghost btn-xs" onclick="clearShopChecks()">uncheck all</button>
+        </div>
       </div>
       <div id="shopList"></div>
     </div>
@@ -640,6 +650,7 @@ nav.tabs {
     <div class="panel-header">
       <div class="panel-title">daily log</div>
     </div>
+    <div id="todayMeals"></div>
     <div class="log-form">
       <h3>log today</h3>
       <div class="form-row">
@@ -962,8 +973,49 @@ const STOULT = (() => {
 const GOOGLE_CLIENT_ID = '829248142619-hvklu048j23gft4m0d5jeg8l1hjv2lid.apps.googleusercontent.com';
 const BASE = 'References/Trainer';
 const DRIVE_ROOT_KEY = 'stoult_drive_root';
-const SKIPS_KEY = 'trainer_skipped_meals';
+const SKIPS_KEY      = 'trainer_skipped_meals';
 const SHOP_CHECKS_KEY = 'trainer_shop_checks';
+const LOGGED_KEY      = 'trainer_logged_meals';
+
+// Per-serving quantity hints for shopping list display
+const QTY_HINTS = {
+  'salmon': '6 oz', 'chicken breast': '6 oz', 'chicken thighs': '6 oz',
+  'lean beef': '5 oz', 'ground beef': '5 oz', 'ground turkey': '5 oz',
+  'turkey breast slices': '3 oz', 'turkey breast': '4 oz',
+  'shrimp': '5 oz', 'canned tuna': '1 can', 'smoked salmon': '3 oz',
+  'pork tenderloin': '5 oz', 'flank steak': '5 oz', 'lamb chops': '2 chops',
+  'cod fillet': '6 oz', 'bacon': '2 strips', 'turkey sausage': '2 links',
+  'turkey pepperoni': '6 slices', 'beef jerky': '1 oz', 'ham': '2 oz',
+  'eggs': '2', 'egg whites': '4', 'firm tofu': '6 oz', 'tempeh': '4 oz',
+  'casein protein powder': '1 scoop', 'protein powder': '1 scoop',
+  'greek yogurt': '¾ cup', 'cottage cheese': '¾ cup', 'kefir': '1 cup',
+  'string cheese': '1 stick', 'cheddar cheese': '1 oz', 'feta cheese': '2 tbsp',
+  'mozzarella': '2 oz', 'parmesan': '2 tbsp', 'cream cheese': '2 tbsp',
+  'almond milk': '1 cup', 'coconut milk': '½ cup', 'milk': '1 cup',
+  'oats': '½ cup', 'brown rice': '⅓ cup dry', 'basmati rice': '⅓ cup dry',
+  'cauliflower rice': '1½ cups', 'quinoa': '¼ cup dry',
+  'whole wheat pasta': '2 oz', 'sourdough bread': '2 slices',
+  'whole wheat bread': '2 slices', 'whole wheat tortilla': '1',
+  'corn tortillas': '2', 'rice cakes': '2', 'bagel thin': '1', 'pita': '1',
+  'granola': '¼ cup', 'black beans': '½ cup', 'kidney beans': '½ cup',
+  'chickpeas': '½ cup', 'lentils': '¼ cup dry', 'edamame': '½ cup',
+  'avocado': '½', 'banana': '1', 'apple': '1', 'mango': '½ cup',
+  'mixed berries': '½ cup', 'cherry tomatoes': '½ cup', 'pineapple chunks': '½ cup',
+  'broccoli': '1 cup', 'spinach': '2 cups', 'kale': '2 cups',
+  'bell pepper': '1', 'sweet potato': '1 medium', 'asparagus': '6 spears',
+  'zucchini': '1 medium', 'brussels sprouts': '1 cup', 'green beans': '1 cup',
+  'snap peas': '1 cup', 'carrots': '½ cup', 'celery': '2 stalks',
+  'cucumber': '½', 'onion': '½', 'red onion': '¼',
+  'mixed greens': '2 cups', 'romaine lettuce': '2 cups', 'arugula': '2 cups',
+  'butter lettuce': '3 leaves',
+  'almond butter': '2 tbsp', 'peanut butter': '2 tbsp', 'tahini': '2 tbsp',
+  'olive oil': '1 tbsp', 'sesame oil': '1 tsp',
+  'hummus': '¼ cup', 'chia seeds': '2 tbsp', 'hemp seeds': '2 tbsp',
+  'almonds': '1 oz', 'walnuts': '1 oz', 'cashews': '1 oz',
+  'mixed nuts': '1 oz', 'pumpkin seeds': '2 tbsp',
+  'dark chocolate': '1 oz', 'dark chocolate chips': '1 tbsp',
+  'canned tomatoes': '½ can', 'tomato sauce': '¼ cup', 'salsa': '¼ cup',
+};
 const KG_PER_LB = 0.45359237;
 const CM_PER_INCH = 2.54;
 
@@ -1595,20 +1647,22 @@ function renderMenu() {
     return;
   }
 
-  const skips = getSkippedMeals();
-  const today = todayISO();
-  const first = state.weeklyMenu[0]?.date || '';
-  const last  = state.weeklyMenu[6]?.date || '';
+  const skips  = getSkippedMeals();
+  const today  = todayISO();
+  const first  = state.weeklyMenu[0]?.date || '';
+  const last   = state.weeklyMenu[6]?.date || '';
   document.getElementById('menuWeekRange').textContent = first && last ? `${formatDate(first)} – ${formatDate(last)}` : '';
 
   // Build reverse type→slot map for filter lookups
   const typeToSlot = { 'am snack':'amSnack', 'pm snack':'pmSnack', breakfast:'breakfast', lunch:'lunch', dinner:'dinner', evening:'evening' };
 
   grid.innerHTML = state.weeklyMenu.map(day => {
-    const isToday = day.date === today;
+    const isToday  = day.date === today;
+    const logged   = getLoggedMeals(day.date);
     const mealsHtml = day.meals.map((meal, mi) => {
       const key     = `${day.dayIndex}-${mi}`;
       const skipped = skips.has(key);
+      const isLogged  = logged.has(String(mi));
       const swapping  = activeSwapKey === key;
       const expanded  = expandedMealKey === key;
 
@@ -1641,6 +1695,9 @@ function renderMenu() {
             <div class="meal-cal">${calLabel}</div>
           </div>
           <div class="meal-actions">
+            <button class="meal-btn${isLogged ? ' log-active' : ''}" title="${isLogged ? 'logged' : 'log meal'}" onclick="toggleLogMeal('${day.date}',${mi},event)">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,8 6,12 14,4"/></svg>
+            </button>
             <button class="meal-btn" title="swap" onclick="swapMeal(${day.dayIndex},${mi},event)">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12M10 2l4 3-4 3M14 11H2M6 8l-4 3 4 3"/></svg>
             </button>
@@ -1709,6 +1766,53 @@ function toggleSkip(dayIndex, mealIndex) {
   renderMenu(); renderShoppingList();
 }
 
+function getLoggedMeals(dateStr) {
+  try {
+    const all = JSON.parse(localStorage.getItem(LOGGED_KEY) || '{}');
+    return new Set((all[dateStr] || []).map(String));
+  } catch { return new Set(); }
+}
+
+function toggleLogMeal(dayDate, mealIndex, event) {
+  event && event.stopPropagation();
+  try {
+    const all = JSON.parse(localStorage.getItem(LOGGED_KEY) || '{}');
+    const set = new Set((all[dayDate] || []).map(String));
+    const k = String(mealIndex);
+    if (set.has(k)) set.delete(k); else set.add(k);
+    all[dayDate] = [...set];
+    // Prune dates older than 30 days to keep storage tidy
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+    for (const d of Object.keys(all)) { if (d < cutoff.toISOString().split('T')[0]) delete all[d]; }
+    localStorage.setItem(LOGGED_KEY, JSON.stringify(all));
+  } catch {}
+  renderMenu();
+  renderTodayMeals();
+}
+
+function renderTodayMeals() {
+  const el = document.getElementById('todayMeals'); if (!el) return;
+  const today = todayISO();
+  const logged = getLoggedMeals(today);
+  if (!logged.size || !state.weeklyMenu.length) { el.innerHTML = ''; return; }
+  const todayDay = state.weeklyMenu.find(d => d.date === today);
+  if (!todayDay) { el.innerHTML = ''; return; }
+  const meals = [...logged].map(Number).sort().map(mi => todayDay.meals[mi]).filter(Boolean);
+  if (!meals.length) { el.innerHTML = ''; return; }
+  const totalCal = meals.reduce((s, m) => s + (m.cal || 0), 0);
+  const totalPro = meals.reduce((s, m) => s + (m.protein || 0), 0);
+  el.innerHTML = `<div class="today-meals-box">
+    <div class="today-meals-head">
+      <span class="section-label" style="margin:0">logged today</span>
+      <span class="today-meals-totals">${totalCal} cal · ${totalPro}g P</span>
+    </div>
+    ${meals.map(m => `<div class="today-meal-row">
+      <span class="meal-type" style="min-width:72px">${m.type}</span>
+      <span class="today-meal-name">${m.name}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
 /* ──────────────────────────────────────────────────────────────
    SHOPPING LIST
    ────────────────────────────────────────────────────────────── */
@@ -1736,7 +1840,7 @@ function buildShoppingList(menu, skips) {
   for (const [ing, count] of Object.entries(counts)) {
     const cat = categorizeIngredient(ing);
     if (!grouped[cat]) grouped[cat] = [];
-    grouped[cat].push({ name: ing, count });
+    grouped[cat].push({ name: ing, count, qty: QTY_HINTS[ing] || null });
   }
   return grouped;
 }
@@ -1760,7 +1864,7 @@ function clearShopChecks() {
 function renderShoppingList() {
   const el = document.getElementById('shopList'); if (!el) return;
   if (!state.weeklyMenu.length) { el.innerHTML = '<div class="shop-empty">generate a menu to see your shopping list.</div>'; return; }
-  const skips = getSkippedMeals();
+  const skips  = getSkippedMeals();
   const checks = getShopChecks();
   const grouped = buildShoppingList(state.weeklyMenu, skips);
   const ORDER = ['Proteins', 'Produce', 'Dairy', 'Grains & Legumes', 'Pantry & Condiments'];
@@ -1771,16 +1875,56 @@ function renderShoppingList() {
     return `<div class="shop-section">
       <div class="shop-category">${cat}</div>
       ${items.map(item => {
-        const k = item.name.replace(/'/g, "\\'");
+        const k       = item.name.replace(/'/g, "\\'");
         const checked = checks.has(item.name);
-        const mark = checked ? `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--bg)" stroke-width="2.5" stroke-linecap="round"><polyline points="2,8 6,12 14,4"/></svg>` : '';
+        const mark    = checked ? `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--bg)" stroke-width="2.5" stroke-linecap="round"><polyline points="2,8 6,12 14,4"/></svg>` : '';
+        const qtyStr  = item.qty
+          ? `${item.qty}${item.count > 1 ? ` × ${item.count}` : ''}`
+          : item.count > 1 ? `×${item.count}` : '';
         return `<div class="shop-item${checked ? ' checked' : ''}" onclick="toggleShopCheck('${k}')">
           <div class="shop-check">${mark}</div>
           <div class="shop-item-name">${item.name}</div>
+          ${qtyStr ? `<div class="shop-item-qty">${qtyStr}</div>` : ''}
         </div>`;
       }).join('')}
     </div>`;
   }).join('');
+}
+
+async function sendToKeep() {
+  if (!storage) { showToast('not connected', 'error'); return; }
+  const skips   = getSkippedMeals();
+  const grouped = buildShoppingList(state.weeklyMenu, skips);
+  const allItems = Object.values(grouped).flat();
+  if (!allItems.length) { showToast('no items to send', 'error'); return; }
+  try {
+    // Parse existing Keep shopping list, drop old trainer items
+    let kept = [];
+    try {
+      const raw = await storage.readFile('References/Keep/Shopping.md');
+      if (raw) {
+        const body = raw.replace(/^---[\s\S]*?---\n?/, '').trim();
+        kept = body.split('\n').map(line => {
+          const m = line.match(/^- \[([ x])\] (.+?)(?:\s*\x3c!--\s*(\w+)\s*--\x3e)?$/);
+          if (!m) return null;
+          return { name: m[2].trim(), checked: m[1] === 'x', source: m[3] || 'manual' };
+        }).filter(Boolean).filter(i => i.source !== 'trainer');
+      }
+    } catch {}
+    const trainerItems = allItems.map(item => {
+      const label = item.qty
+        ? `${item.name}${item.count > 1 ? ` (${item.qty} × ${item.count})` : ` (${item.qty})`}`
+        : item.name;
+      return { name: label, checked: false, source: 'trainer' };
+    });
+    const merged = [...kept, ...trainerItems];
+    const body   = merged.map(i =>
+      `- [${i.checked ? 'x' : ' '}] ${i.name}${i.source !== 'manual' ? ` <!-- ${i.source} -->` : ''}`
+    ).join('\n');
+    const fm = `---\ntitle: Shopping List\nupdated: ${todayISO()}\ntags:\n  - keep\n  - shopping\n---\n\n`;
+    await storage.writeFile('References/Keep/Shopping.md', fm + body);
+    showToast(`${trainerItems.length} items sent to the keep`);
+  } catch { showToast('failed to write to keep', 'error'); }
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -1903,6 +2047,7 @@ function setTab(name) {
     document.getElementById(`tab${cap}`).classList.toggle('active', t === name);
   });
   if (name === 'setup') renderProfileArea();
+  if (name === 'log') renderTodayMeals();
 }
 
 function wireSelectors() {
