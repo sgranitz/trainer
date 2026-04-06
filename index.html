@@ -1701,7 +1701,7 @@ function renderMenu() {
             <button class="meal-btn" title="swap" onclick="swapMeal(${day.dayIndex},${mi},event)">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12M10 2l4 3-4 3M14 11H2M6 8l-4 3 4 3"/></svg>
             </button>
-            <button class="meal-btn${skipped ? ' skip-active' : ''}" title="skip" onclick="toggleSkip(${day.dayIndex},${mi})">
+            <button class="meal-btn${skipped ? ' skip-active' : ''}" title="skip" onclick="toggleSkip(${day.dayIndex},${mi},event)">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>
             </button>
           </div>
@@ -1758,7 +1758,8 @@ function getSkippedMeals() {
   try { return new Set(JSON.parse(localStorage.getItem(SKIPS_KEY) || '[]')); } catch { return new Set(); }
 }
 
-function toggleSkip(dayIndex, mealIndex) {
+function toggleSkip(dayIndex, mealIndex, event) {
+  event && event.stopPropagation();
   const skips = getSkippedMeals();
   const key = `${dayIndex}-${mealIndex}`;
   if (skips.has(key)) skips.delete(key); else skips.add(key);
@@ -1774,7 +1775,7 @@ function getLoggedMeals(dateStr) {
 }
 
 function toggleLogMeal(dayDate, mealIndex, event) {
-  event && event.stopPropagation();
+  event && event.stopPropagation(); // prevent bubbling to meal-row-top (toggleRecipe)
   try {
     const all = JSON.parse(localStorage.getItem(LOGGED_KEY) || '{}');
     const set = new Set((all[dayDate] || []).map(String));
