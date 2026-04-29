@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trainer — Log Migration</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #1a1612;
+  color: #e8e0d4;
+  font-family: system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 20px;
+  gap: 24px;
+}
+h1 { font-size: 18px; font-weight: 500; color: #c8a96e; letter-spacing: 0.06em; }
+.desc { font-size: 13px; color: #8a8070; line-height: 1.6; max-width: 520px; text-align: center; }
+.desc code { background: #2a2420; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+.card {
+  background: #2a2420;
+  border: 1px solid rgba(200,169,110,0.13);
+  border-radius: 10px;
+  padding: 24px 28px;
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.step-label { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #5a5040; }
+.step-title { font-size: 14px; font-weight: 500; color: #e8e0d4; }
+.step-desc  { font-size: 12px; color: #8a8070; line-height: 1.5; }
+textarea {
+  width: 100%; background: #221e19; border: 1px solid rgba(200,169,110,0.18);
+  border-radius: 6px; color: #e8e0d4; font-family: monospace; font-size: 11px;
+  padding: 10px 12px; resize: vertical; outline: none; line-height: 1.6;
+}
+textarea:focus { border-color: #c8a96e; }
+.row { display: flex; align-items: center; gap: 10px; }
+.row label { font-size: 11px; color: #8a8070; flex-shrink: 0; }
+.row input[type=number] {
+  width: 72px; background: #221e19; border: 1px solid rgba(200,169,110,0.18);
+  border-radius: 6px; color: #e8e0d4; font-family: monospace; font-size: 13px;
+  padding: 6px 10px; outline: none;
+}
+.row input[type=number]:focus { border-color: #c8a96e; }
+button {
+  background: #c8a96e; border: none; color: #1a1612;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  letter-spacing: 0.06em; padding: 10px 18px; border-radius: 6px;
+  cursor: pointer; align-self: flex-start; transition: background 0.15s;
+}
+button:hover { background: #d4b87e; }
+button:disabled { background: #3d3630; color: #5a5040; cursor: not-allowed; }
+.status { font-size: 12px; color: #70a880; line-height: 1.5; }
+.status.error { color: #c87060; }
+.log {
+  background: #221e19; border: 1px solid rgba(200,169,110,0.13);
+  border-radius: 6px; padding: 12px 14px; font-size: 11px; color: #8a8070;
+  font-family: monospace; max-height: 260px; overflow-y: auto; line-height: 1.7;
+}
+.log .ok  { color: #70a880; }
+.log .err { color: #c87060; }
+.log .dim { color: #5a5040; }
+</style>
+</head>
+<body>
+
+<h1>Trainer — Log → Vault Migration</h1>
+<p class="desc">Parses your plain-text daily log and writes one <code>YYYY-MM-DD.md</code> file per day into <code>References/Trainer/</code> inside your vault folder.</p>
+
+<div class="card" id="step1">
+  <div class="step-label">Step 1</div>
+  <div class="step-title">Paste your log</div>
+  <div class="step-desc">Paste the full log text. Date lines like <code>4/5</code> or <code>4/5 50u 240</code> start each day.</div>
+  <textarea id="logInput" rows="12" placeholder="4/5 50u 240&#10;9k steps, 3.5 miles&#10;Green tea, coffee, coke zero&#10;Banana (110c), tuna salad (300c)&#10;&#10;4/6&#10;..."></textarea>
+  <div class="row">
+    <label>Year</label>
+    <input type="number" id="yearInput" value="2026">
+  </div>
+  <button id="btnParse" onclick="doParse()">parse log</button>
+  <div class="status" id="parseStatus"></div>
+</div>
+
+<div class="card" id="step2" style="opacity:0.4;pointer-events:none;">
+  <div class="step-label">Step 2</div>
+  <div class="step-title">Pick your vault folder</div>
+  <div class="step-desc">Select the root folder of your vault. The migration writes into <code>References/Trainer/</code> inside it.</div>
+  <button id="btnFolder" onclick="pickFolder()">pick folder</button>
+  <div class="status" id="folderStatus"></div>
+</div>
+
+<div class="card" id="step3" style="opacity:0.4;pointer-events:none;">
+  <div class="step-label">Step 3</div>
+  <div class="step-title">Write files</div>
+  <div class="step-desc">Writes one <code>YYYY-MM-DD.md</code> per day. Existing files are overwritten.</div>
+  <button id="btnMigrate" onclick="runMigration()">write files</button>
+  <div class="status" id="migrateStatus"></div>
+  <div class="log" id="migrateLog" style="display:none;"></div>
+</div>
+
+<script>
+let parsedDays = [];
+let vaultRoot  = null;
+
+// ── Parser ────────────────────────────────────────────────────────────────────
+
+const DATE_RE    = /^(\d{1,2})\/(\d{1,2})\s*(?:(\d+)u)?\s*(\d{2,3})?\s*$/;
+const STEPS_RE   = /^([\d.]+)(k?)\s*steps?,\s*([\d.]+)\s*miles?/i;
+const WORKOUT_RE = /^workout:/i;
+const CAL_RE     = /\(\d+c\)/gi;
+const DRINK_KW   = /\b(coffee|tea|water|coke|cola|juice|milk|soda|sparkling|electrolyte|lemon|hibiscus|chai|matcha|poppi|sprite|beer|wine|broth(?!\s+\d+g\s*p)|kombucha)\b/i;
+
+function countCals(line) { return (line.match(CAL_RE) || []).length; }
+
+function isDrinkLine(line) { return DRINK_KW.test(line); }
+
+function parseItem(raw) {
+  const s = raw.trim();
+  if (!s) return null;
+  const proMatch = s.match(/(\d+)g\s*p\b/i);
+  const calMatch = s.match(/\((\d+)c\)?/i);
+  const name = s
+    .replace(/\s+\d+g\s*p\b/i, '')
+    .replace(/\s*\(?\d+c\)?/gi, '')
+    .trim();
+  return {
+    name: name || s,
+    p:   proMatch ? parseInt(proMatch[1]) : null,
+    cal: calMatch ? parseInt(calMatch[1]) : null,
+  };
+}
+
+function parseExercise(raw) {
+  const s = raw.trim();
+  const m = s.match(/^(.*?)\s+(\d+)x(\d+)(?:sec)?\s*(?:(\d+)lbs?)?$/i);
+  if (m) return { name: m[1].trim(), sets: parseInt(m[2]), reps: parseInt(m[3]), weight: m[4] ? parseInt(m[4]) : null };
+  return { name: s, sets: null, reps: null, weight: null };
+}
+
+function classifyLine(line) {
+  if (STEPS_RE.test(line))   return 'steps';
+  if (WORKOUT_RE.test(line)) return 'workout';
+  const n = countCals(line);
+  if (n >= 2) return 'food';
+  if (n === 1) return isDrinkLine(line) ? 'drink' : 'food';
+  if (line.includes(',')) return 'drink';
+  return 'note';
+}
+
+function parseLog(text, year) {
+  const lines = text.split('\n').map(l => l.trim());
+  const days  = [];
+  let cur     = null;
+
+  for (const line of lines) {
+    if (!line) continue;
+
+    // Skip the header block (non-date metadata lines before first day)
+    const dm = line.match(DATE_RE);
+    if (dm) {
+      if (cur) days.push(cur);
+      const date   = new Date(year, parseInt(dm[1]) - 1, parseInt(dm[2]));
+      const units  = dm[3] ? parseInt(dm[3])   : null;
+      const weight = dm[4] ? parseFloat(dm[4]) : null;
+      cur = { date, weight, units, steps: [], food: [], drinks: [], workout: [], notes: '' };
+      continue;
+    }
+
+    if (!cur) continue;
+
+    const kind = classifyLine(line);
+
+    if (kind === 'steps') {
+      const m  = line.match(STEPS_RE);
+      const k  = Math.round(parseFloat(m[1]) * (m[2] === 'k' ? 1000 : 1));
+      const mi = parseFloat(m[3]);
+      cur.steps.push({ k, mi });
+    } else if (kind === 'workout') {
+      const exStr = line.replace(/^workout:\s*/i, '');
+      exStr.split(',').forEach(e => {
+        const ex = parseExercise(e);
+        if (ex.name) cur.workout.push(ex);
+      });
+    } else if (kind === 'food') {
+      line.split(',').forEach(raw => {
+        const item = parseItem(raw);
+        if (item && (item.name || item.cal)) cur.food.push(item);
+      });
+    } else if (kind === 'drink') {
+      line.split(',').forEach(raw => {
+        // Strip any calorie annotation from drink items
+        const clean = raw.trim().replace(/\s*\(?\d+c\)?/gi, '').trim();
+        if (clean) cur.drinks.push(clean);
+      });
+    } else {
+      // note
+      cur.notes = cur.notes ? cur.notes + '\n' + line : line;
+    }
+  }
+
+  if (cur) days.push(cur);
+  return days;
+}
+
+// ── Markdown builder ──────────────────────────────────────────────────────────
+
+function toISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function buildMarkdown(meta, body) {
+  const lines = ['---'];
+  for (const [k, v] of Object.entries(meta)) {
+    if (v === null || v === undefined || v === '') continue;
+    lines.push(`${k}: ${v}`);
+  }
+  lines.push('---');
+  if (body && body.trim()) lines.push('', body.trim());
+  return lines.join('\n') + '\n';
+}
+
+function buildDayFile(entry) {
+  const meta = { date: toISO(entry.date) };
+  if (entry.weight != null) meta.weight = String(entry.weight);
+  if (entry.units  != null) meta.units  = String(entry.units);
+
+  const body = [];
+  entry.steps.forEach(s => body.push(`steps: ${s.k}${s.mi != null ? ' | ' + s.mi : ''}`));
+  entry.food.forEach(f => {
+    let line = `food: ${f.name}`;
+    if (f.p != null || f.cal != null) line += ` | ${f.p != null ? f.p : ''}`;
+    if (f.cal != null) line += ` | ${f.cal}`;
+    body.push(line);
+  });
+  entry.drinks.forEach(d => body.push(`drink: ${d}`));
+  entry.workout.forEach(w => {
+    let line = `workout: ${w.name}`;
+    if (w.sets   != null) line += ` | ${w.sets}`;
+    if (w.reps   != null) line += ` | ${w.reps}`;
+    if (w.weight != null) line += ` | ${w.weight}`;
+    body.push(line);
+  });
+  (entry.notes || '').split('\n').filter(l => l.trim()).forEach(l => body.push(`note: ${l.trim()}`));
+
+  return buildMarkdown(meta, body.join('\n'));
+}
+
+// ── Step 1: Parse ─────────────────────────────────────────────────────────────
+
+function doParse() {
+  const text = document.getElementById('logInput').value.trim();
+  const year = parseInt(document.getElementById('yearInput').value) || 2026;
+  if (!text) { setStatus('parseStatus', 'Paste your log first.', true); return; }
+
+  parsedDays = parseLog(text, year);
+
+  if (!parsedDays.length) {
+    setStatus('parseStatus', 'No days found — check the format (date lines like 4/5 or 4/5 50u 240).', true);
+    return;
+  }
+
+  const totalFood    = parsedDays.reduce((s, d) => s + d.food.length,    0);
+  const totalSteps   = parsedDays.reduce((s, d) => s + d.steps.length,   0);
+  const totalWorkout = parsedDays.reduce((s, d) => s + d.workout.length,  0);
+
+  setStatus('parseStatus',
+    `Found ${parsedDays.length} days — ${totalSteps} step entries, ${totalFood} food items, ${totalWorkout} exercises ✓`);
+
+  enableStep(2);
+}
+
+// ── Step 2: Folder ────────────────────────────────────────────────────────────
+
+async function pickFolder() {
+  if (!window.showDirectoryPicker) {
+    setStatus('folderStatus', 'Folder picker not supported — use Chrome or Edge.', true);
+    return;
+  }
+  try {
+    vaultRoot = await window.showDirectoryPicker({ mode: 'readwrite' });
+    setStatus('folderStatus', `Vault: "${vaultRoot.name}" ✓`);
+    enableStep(3);
+  } catch (e) {
+    if (e.name !== 'AbortError') setStatus('folderStatus', 'Could not open folder.', true);
+  }
+}
+
+// ── Step 3: Write ─────────────────────────────────────────────────────────────
+
+async function runMigration() {
+  document.getElementById('btnMigrate').disabled = true;
+  document.getElementById('migrateLog').innerHTML = '';
+  setStatus('migrateStatus', `Writing ${parsedDays.length} files…`);
+
+  let refDir, trainerDir;
+  try {
+    refDir     = await vaultRoot.getDirectoryHandle('References', { create: true });
+    trainerDir = await refDir.getDirectoryHandle('Trainer',      { create: true });
+  } catch (e) {
+    setStatus('migrateStatus', 'Could not create vault folders: ' + e.message, true);
+    document.getElementById('btnMigrate').disabled = false;
+    return;
+  }
+
+  let ok = 0, err = 0;
+  for (const day of parsedDays) {
+    const iso     = toISO(day.date);
+    const content = buildDayFile(day);
+    try {
+      const fh = await trainerDir.getFileHandle(`${iso}.md`, { create: true });
+      const w  = await fh.createWritable();
+      await w.write(content);
+      await w.close();
+      logLine(`✓ ${iso}.md`, 'ok');
+      ok++;
+    } catch (e) {
+      logLine(`✗ ${iso}.md — ${e.message}`, 'err');
+      err++;
+    }
+  }
+
+  setStatus('migrateStatus',
+    err === 0
+      ? `Done — ${ok} files written ✓`
+      : `Done — ${ok} written, ${err} errors`,
+    err > 0);
+  document.getElementById('btnMigrate').disabled = false;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function setStatus(id, msg, isError = false) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = isError ? 'status error' : 'status';
+}
+
+function logLine(msg, cls = '') {
+  const log = document.getElementById('migrateLog');
+  log.style.display = '';
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  div.textContent = msg;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function enableStep(n) {
+  const card = document.getElementById(`step${n}`);
+  card.style.opacity = '1';
+  card.style.pointerEvents = '';
+}
+</script>
+</body>
+</html>

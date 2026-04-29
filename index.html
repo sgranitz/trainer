@@ -741,7 +741,12 @@ function buildDayFile(entry) {
 
   const bodyLines = [];
   entry.steps.forEach(s   => bodyLines.push(`steps: ${s.k}${s.mi != null ? ' | ' + s.mi : ''}`));
-  entry.food.forEach(f    => bodyLines.push(`food: ${f.name}${f.p != null ? ' | ' + f.p : ''}${f.cal != null ? ' | ' + f.cal : ''}`));
+  entry.food.forEach(f => {
+    let line = `food: ${f.name}`;
+    if (f.p != null || f.cal != null) line += ` | ${f.p != null ? f.p : ''}`;
+    if (f.cal != null) line += ` | ${f.cal}`;
+    bodyLines.push(line);
+  });
   entry.drinks.forEach(d  => bodyLines.push(`drink: ${d}`));
   entry.workout.forEach(w => {
     let line = `workout: ${w.name}`;
