@@ -1101,14 +1101,16 @@ function renderStats() {
 
 // Fit W(t) = wEq + C·exp(-k·t) via grid search over equilibrium weight.
 // Returns { wEq, k, C, t0ms } (t in days from first entry) or null.
-function fitExpDecay(sorted) {
+function fitExpDecay(sorted, maxWEq = null) {
   const t0ms = sorted[0].date.getTime();
   const ts   = sorted.map(e => (e.date.getTime() - t0ms) / 86400000);
   const ws   = sorted.map(e => e.weight);
   const wMin = Math.min(...ws);
 
   let bestSSE = Infinity, best = null;
-  for (let wEq = wMin - 0.5; wEq >= Math.max(60, wMin - 130); wEq -= 0.5) {
+  // If a goal is set, only search equilibria below it — forces a curve that reaches the goal.
+  const searchTop = (maxWEq != null) ? Math.min(wMin - 0.5, maxWEq - 1) : wMin - 0.5;
+  for (let wEq = searchTop; wEq >= Math.max(60, wMin - 130); wEq -= 0.5) {
     if (ws.some(w => w - wEq < 0.1)) continue;
     const ys  = ws.map(w => Math.log(w - wEq));
     const n   = ts.length;
@@ -1136,28 +1138,19 @@ function renderWeightChart(withWt) {
 
   const { goalWt } = PROFILE;
   const sorted = [...withWt].sort((a, b) => a.date - b.date);
-  const model  = sorted.length >= 2 ? fitExpDecay(sorted) : null;
+  const model  = sorted.length >= 2 ? fitExpDecay(sorted, goalWt) : null;
 
-  // Build projection curve
-  let projCurve = [], projDate = null, plateauWt = null;
-  if (model) {
+  // Build projection curve (exponential decay toward goal)
+  let projCurve = [], projDate = null;
+  if (model && goalWt != null) {
     const { wEq, k, C, t0ms } = model;
     const tLast = (sorted[sorted.length - 1].date.getTime() - t0ms) / 86400000;
-
-    if (goalWt != null && wEq < goalWt - 0.5) {
-      // Goal is below equilibrium — compute when curve crosses goal
-      const tGoal = -Math.log((goalWt - wEq) / C) / k;
-      if (tGoal > tLast && tGoal - tLast < 3650) {
-        projDate = new Date(t0ms + tGoal * 86400000);
-        for (let t = tLast; t <= tGoal; t += 2)
-          projCurve.push({ ms: t0ms + t * 86400000, w: wEq + C * Math.exp(-k * t) });
-        projCurve.push({ ms: t0ms + tGoal * 86400000, w: goalWt });
-      }
-    } else {
-      // Plateau above goal — show 120-day asymptote
-      plateauWt = Math.round(wEq);
-      for (let t = tLast; t <= tLast + 120; t += 2)
+    const tGoal = -Math.log((goalWt - wEq) / C) / k;
+    if (tGoal > tLast && tGoal - tLast < 3650) {
+      projDate = new Date(t0ms + tGoal * 86400000);
+      for (let t = tLast; t <= tGoal; t += 2)
         projCurve.push({ ms: t0ms + t * 86400000, w: wEq + C * Math.exp(-k * t) });
+      projCurve.push({ ms: t0ms + tGoal * 86400000, w: goalWt });
     }
   }
 
@@ -1204,11 +1197,6 @@ function renderWeightChart(withWt) {
       const gy = ty(goalWt).toFixed(1);
       projSVG += `<circle cx="${gx}" cy="${gy}" r="2.5" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.6"/>
         <text x="${gx}" y="${(+gy - 6).toFixed(1)}" fill="var(--muted)" font-size="8" text-anchor="middle" font-family="var(--mono)" opacity="0.8">${fmt(projDate)}</text>`;
-    } else if (plateauWt != null) {
-      const last = projCurve[projCurve.length - 1];
-      const py = ty(last.w).toFixed(1);
-      const px = tx(last.ms).toFixed(1);
-      projSVG += `<text x="${px}" y="${(+py - 6).toFixed(1)}" fill="var(--muted)" font-size="8" text-anchor="end" font-family="var(--mono)" opacity="0.7">~${plateauWt} plateau</text>`;
     }
   }
 
@@ -1223,11 +1211,18 @@ function renderWeightChart(withWt) {
       <text x="${x.toFixed(1)}" y="${(y - 6).toFixed(1)}" fill="var(--amber)" font-size="9" text-anchor="${anchor}" font-family="var(--mono)">${e.weight}</text>`;
   }).join('');
 
-  // X-axis date labels
-  const xSVG = sorted.map(e => {
-    const x = tx(e.date.getTime()).toFixed(1);
-    return `<text x="${x}" y="${H - 4}" fill="var(--muted)" font-size="8" text-anchor="middle" font-family="var(--mono)" opacity="0.6">${fmt(e.date)}</text>`;
-  }).join('');
+  // X-axis date labels — skip any that would overlap (min 38px apart)
+  const xSVG = (() => {
+    const out = []; let lastX = -Infinity;
+    sorted.forEach(e => {
+      const x = tx(e.date.getTime());
+      if (x - lastX >= 38) {
+        out.push(`<text x="${x.toFixed(1)}" y="${H - 4}" fill="var(--muted)" font-size="8" text-anchor="middle" font-family="var(--mono)" opacity="0.6">${fmt(e.date)}</text>`);
+        lastX = x;
+      }
+    });
+    return out.join('');
+  })();
 
   el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
     ${goalSVG}
