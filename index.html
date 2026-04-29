@@ -530,10 +530,6 @@ const STOULT = (() => {
         <span class="field-lbl">lbs</span>
         <input class="inp" type="number" id="inWeight" placeholder="—" step="0.1" oninput="schedSave()">
       </div>
-      <div class="weight-field">
-        <span class="field-lbl">units</span>
-        <input class="inp" type="number" id="inUnits" placeholder="—" oninput="schedSave()">
-      </div>
     </div>
   </div>
 
@@ -685,7 +681,7 @@ function isoDate(d) {
 }
 
 function blankEntry(d) {
-  return { date: new Date(d), weight: null, units: null, steps: [], food: [], drinks: [], workout: [], notes: '' };
+  return { date: new Date(d), weight: null, steps: [], food: [], drinks: [], workout: [], notes: '' };
 }
 
 function parseDayFile(raw) {
@@ -697,7 +693,6 @@ function parseDayFile(raw) {
   const entry = {
     date,
     weight: meta.weight ? parseFloat(meta.weight) : null,
-    units:  meta.units  ? parseInt(meta.units)    : null,
     steps: [], food: [], drinks: [], workout: [], notes: ''
   };
 
@@ -734,7 +729,6 @@ function buildDayFile(entry) {
   const iso  = isoDate(entry.date);
   const meta = { date: iso };
   if (entry.weight != null) meta.weight = String(entry.weight);
-  if (entry.units  != null) meta.units  = String(entry.units);
 
   const bodyLines = [];
   entry.steps.forEach(s   => bodyLines.push(`steps: ${s.k}${s.mi != null ? ' | ' + s.mi : ''}`));
@@ -860,9 +854,7 @@ function schedSave() {
 function flushEntry() {
   clearTimeout(_saveTimer);
   const wt = parseFloat(document.getElementById('inWeight').value);
-  const u  = parseInt(document.getElementById('inUnits').value);
   curEntry.weight = isNaN(wt) ? null : wt;
-  curEntry.units  = isNaN(u)  ? null : u;
   curEntry.notes  = document.getElementById('inNotes').value;
   saveCurrentDay();
 }
@@ -881,7 +873,6 @@ function renderLog() {
   document.getElementById('dateSub').textContent = isToday ? `${DAYS[curDate.getDay()]} · today` : DAYS[curDate.getDay()];
 
   document.getElementById('inWeight').value = curEntry.weight ?? '';
-  document.getElementById('inUnits').value  = curEntry.units  ?? '';
   document.getElementById('inNotes').value  = curEntry.notes  || '';
   renderSteps(); renderFood(); renderDrinks(); renderWorkout();
 }
@@ -1107,6 +1098,35 @@ function renderStats() {
 }
 
 // ── Weight chart ─────────────────────────────────────────────────────────────
+
+// Fit W(t) = wEq + C·exp(-k·t) via grid search over equilibrium weight.
+// Returns { wEq, k, C, t0ms } (t in days from first entry) or null.
+function fitExpDecay(sorted) {
+  const t0ms = sorted[0].date.getTime();
+  const ts   = sorted.map(e => (e.date.getTime() - t0ms) / 86400000);
+  const ws   = sorted.map(e => e.weight);
+  const wMin = Math.min(...ws);
+
+  let bestSSE = Infinity, best = null;
+  for (let wEq = wMin - 0.5; wEq >= Math.max(60, wMin - 130); wEq -= 0.5) {
+    if (ws.some(w => w - wEq < 0.1)) continue;
+    const ys  = ws.map(w => Math.log(w - wEq));
+    const n   = ts.length;
+    const sT  = ts.reduce((a, v)    => a + v,        0);
+    const sY  = ys.reduce((a, v)    => a + v,        0);
+    const sTY = ts.reduce((a, v, i) => a + v * ys[i], 0);
+    const sT2 = ts.reduce((a, v)    => a + v * v,    0);
+    const D   = n * sT2 - sT * sT;
+    if (Math.abs(D) < 1e-10) continue;
+    const k = -(n * sTY - sT * sY) / D;
+    if (k <= 0) continue;
+    const C   = Math.exp((sY + k * sT) / n);
+    const sse = ts.reduce((s, t, i) => s + (ws[i] - wEq - C * Math.exp(-k * t)) ** 2, 0);
+    if (sse < bestSSE) { bestSSE = sse; best = { wEq, k, C, t0ms }; }
+  }
+  return best;
+}
+
 function renderWeightChart(withWt) {
   const el = document.getElementById('wtTrend');
   if (!withWt.length) {
@@ -1116,90 +1136,105 @@ function renderWeightChart(withWt) {
 
   const { goalWt } = PROFILE;
   const sorted = [...withWt].sort((a, b) => a.date - b.date);
+  const model  = sorted.length >= 2 ? fitExpDecay(sorted) : null;
 
-  // 7-day rate from last two weight entries
-  const last2 = sorted.slice(-2);
-  let ratePerDay = null, projDate = null;
-  if (last2.length >= 2) {
-    const days = (last2[1].date - last2[0].date) / 86400000;
-    ratePerDay = days > 0 ? (last2[1].weight - last2[0].weight) / days : null;
-    if (ratePerDay && ratePerDay < 0 && goalWt != null) {
-      const daysToGoal = (last2[1].weight - goalWt) / (-ratePerDay);
-      projDate = new Date(last2[1].date.getTime() + daysToGoal * 86400000);
+  // Build projection curve
+  let projCurve = [], projDate = null, plateauWt = null;
+  if (model) {
+    const { wEq, k, C, t0ms } = model;
+    const tLast = (sorted[sorted.length - 1].date.getTime() - t0ms) / 86400000;
+
+    if (goalWt != null && wEq < goalWt - 0.5) {
+      // Goal is below equilibrium — compute when curve crosses goal
+      const tGoal = -Math.log((goalWt - wEq) / C) / k;
+      if (tGoal > tLast && tGoal - tLast < 3650) {
+        projDate = new Date(t0ms + tGoal * 86400000);
+        for (let t = tLast; t <= tGoal; t += 2)
+          projCurve.push({ ms: t0ms + t * 86400000, w: wEq + C * Math.exp(-k * t) });
+        projCurve.push({ ms: t0ms + tGoal * 86400000, w: goalWt });
+      }
+    } else {
+      // Plateau above goal — show 120-day asymptote
+      plateauWt = Math.round(wEq);
+      for (let t = tLast; t <= tLast + 120; t += 2)
+        projCurve.push({ ms: t0ms + t * 86400000, w: wEq + C * Math.exp(-k * t) });
     }
   }
 
   // Axis bounds
-  const weights = sorted.map(e => e.weight);
-  const allWts  = goalWt != null ? [...weights, goalWt] : weights;
-  const rawMin  = Math.min(...allWts);
-  const rawMax  = Math.max(...allWts);
-  const yPad    = Math.max((rawMax - rawMin) * 0.12, 4);
-  const yMin    = rawMin - yPad;
-  const yMax    = rawMax + yPad;
-  const yRange  = yMax - yMin;
+  const weights  = sorted.map(e => e.weight);
+  const projWts  = projCurve.map(p => p.w);
+  const allWts   = [...weights, ...projWts, ...(goalWt != null ? [goalWt] : [])];
+  const yRawMin  = Math.min(...allWts);
+  const yRawMax  = Math.max(...weights);
+  const yPad     = Math.max((yRawMax - yRawMin) * 0.08, 4);
+  const yMin     = yRawMin - yPad;
+  const yMax     = yRawMax + yPad;
+  const yRange   = yMax - yMin;
 
-  const xStart = sorted[0].date;
-  const xEnd   = projDate
-    ? new Date(Math.max(projDate.getTime(), sorted[sorted.length - 1].date.getTime()))
-    : new Date(sorted[sorted.length - 1].date.getTime() + 21 * 86400000);
-  const totalDays = Math.max((xEnd - xStart) / 86400000, 1);
+  const xStartMs = sorted[0].date.getTime();
+  const xEndMs   = projCurve.length
+    ? projCurve[projCurve.length - 1].ms
+    : sorted[sorted.length - 1].date.getTime() + 21 * 86400000;
+  const totalDays = Math.max((xEndMs - xStartMs) / 86400000, 1);
 
-  // SVG layout
   const W = 440, H = 155;
   const pL = 36, pR = 16, pT = 14, pB = 24;
-  const plotW = W - pL - pR;
-  const plotH = H - pT - pB;
+  const plotW = W - pL - pR, plotH = H - pT - pB;
 
-  const tx = d  => pL + ((d - xStart) / 86400000 / totalDays) * plotW;
-  const ty = w  => pT + (1 - (w - yMin) / yRange) * plotH;
-  const fmt = d => `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  const tx  = ms => pL + ((ms - xStartMs) / 86400000 / totalDays) * plotW;
+  const ty  = w  => pT + (1 - (w - yMin) / yRange) * plotH;
+  const fmt = d  => `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 
   // Goal line
   let goalSVG = '';
   if (goalWt != null) {
     const gy = ty(goalWt).toFixed(1);
     goalSVG = `<line x1="${pL}" y1="${gy}" x2="${W - pR}" y2="${gy}" stroke="var(--amber)" stroke-width="1" stroke-dasharray="4,3" opacity="0.35"/>
-      <text x="${(pL - 4)}" y="${(+gy + 3.5).toFixed(1)}" fill="var(--amber)" font-size="8" text-anchor="end" font-family="var(--mono)" opacity="0.55">${goalWt}</text>`;
+      <text x="${pL - 4}" y="${(+gy + 3.5).toFixed(1)}" fill="var(--amber)" font-size="8" text-anchor="end" font-family="var(--mono)" opacity="0.55">${goalWt}</text>`;
   }
 
-  // Projection line + label
+  // Projection curve
   let projSVG = '';
-  if (projDate && ratePerDay) {
-    const lx = tx(sorted[sorted.length - 1].date).toFixed(1);
-    const ly = ty(sorted[sorted.length - 1].weight).toFixed(1);
-    const gx = tx(projDate).toFixed(1);
-    const gy = ty(goalWt).toFixed(1);
-    projSVG = `<line x1="${lx}" y1="${ly}" x2="${gx}" y2="${gy}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
-      <text x="${gx}" y="${(+gy - 6).toFixed(1)}" fill="var(--muted)" font-size="8" text-anchor="middle" font-family="var(--mono)" opacity="0.75">${fmt(projDate)}</text>
-      <circle cx="${gx}" cy="${gy}" r="2.5" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.5"/>`;
+  if (projCurve.length >= 2) {
+    const pts = projCurve.map(p => `${tx(p.ms).toFixed(1)},${ty(p.w).toFixed(1)}`).join(' ');
+    projSVG = `<polyline points="${pts}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4,3" opacity="0.55"/>`;
+    if (projDate) {
+      const gx = tx(projDate.getTime()).toFixed(1);
+      const gy = ty(goalWt).toFixed(1);
+      projSVG += `<circle cx="${gx}" cy="${gy}" r="2.5" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.6"/>
+        <text x="${gx}" y="${(+gy - 6).toFixed(1)}" fill="var(--muted)" font-size="8" text-anchor="middle" font-family="var(--mono)" opacity="0.8">${fmt(projDate)}</text>`;
+    } else if (plateauWt != null) {
+      const last = projCurve[projCurve.length - 1];
+      const py = ty(last.w).toFixed(1);
+      const px = tx(last.ms).toFixed(1);
+      projSVG += `<text x="${px}" y="${(+py - 6).toFixed(1)}" fill="var(--muted)" font-size="8" text-anchor="end" font-family="var(--mono)" opacity="0.7">~${plateauWt} plateau</text>`;
+    }
   }
 
   // Actual line
-  const pts = sorted.map(e => `${tx(e.date).toFixed(1)},${ty(e.weight).toFixed(1)}`).join(' ');
+  const actPts = sorted.map(e => `${tx(e.date.getTime()).toFixed(1)},${ty(e.weight).toFixed(1)}`).join(' ');
 
-  // Dots + weight labels
-  let dotsSVG = '';
-  sorted.forEach((e, i) => {
-    const x = tx(e.date), y = ty(e.weight);
+  // Dots + labels
+  const dotsSVG = sorted.map((e, i) => {
+    const x = tx(e.date.getTime()), y = ty(e.weight);
     const anchor = i === 0 ? 'start' : i === sorted.length - 1 ? 'end' : 'middle';
-    dotsSVG += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="var(--amber)"/>
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="var(--amber)"/>
       <text x="${x.toFixed(1)}" y="${(y - 6).toFixed(1)}" fill="var(--amber)" font-size="9" text-anchor="${anchor}" font-family="var(--mono)">${e.weight}</text>`;
-  });
+  }).join('');
 
-  // X-axis date labels (actual data points only)
-  let xLabelsSVG = '';
-  sorted.forEach(e => {
-    const x = tx(e.date).toFixed(1);
-    xLabelsSVG += `<text x="${x}" y="${H - 4}" fill="var(--muted)" font-size="8" text-anchor="middle" font-family="var(--mono)" opacity="0.6">${fmt(e.date)}</text>`;
-  });
+  // X-axis date labels
+  const xSVG = sorted.map(e => {
+    const x = tx(e.date.getTime()).toFixed(1);
+    return `<text x="${x}" y="${H - 4}" fill="var(--muted)" font-size="8" text-anchor="middle" font-family="var(--mono)" opacity="0.6">${fmt(e.date)}</text>`;
+  }).join('');
 
   el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
     ${goalSVG}
     ${projSVG}
-    <polyline points="${pts}" fill="none" stroke="var(--amber)" stroke-width="1.5"/>
+    <polyline points="${actPts}" fill="none" stroke="var(--amber)" stroke-width="1.5"/>
     ${dotsSVG}
-    ${xLabelsSVG}
+    ${xSVG}
   </svg>`;
 }
 
