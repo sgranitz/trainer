@@ -439,6 +439,25 @@ const STOULT = (() => {
 </head>
 <body>
 
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<div class="header">
+  <div class="header-left">
+    <a class="back-link" href="https://www.stoult.com/workshop/">← return to the workshop</a>
+    <div class="wordmark">the <em>trainer</em></div>
+  </div>
+  <div class="header-right">
+    <div class="identity-pill" id="idPill">
+      <div class="pill-dot" id="pillDot"></div>
+      <span class="pill-label" id="pillLabel">not connected</span>
+      <button class="pill-btn" id="signOutBtn" style="display:none" onclick="signOut()">sign out</button>
+    </div>
+  </div>
+</div>
+
+<svg class="seam" viewBox="0 0 900 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 9 Q170 15 400 10 Q630 5 900 13" fill="none" stroke="var(--amber)" stroke-width="1" opacity="0.35"/>
+</svg>
+
 <!-- ── Auth gate ───────────────────────────────────────────────────────────── -->
 <div id="authGate" class="auth-gate-card" style="display:none;">
   <div class="auth-gate-label">connect vault</div>
@@ -475,25 +494,6 @@ const STOULT = (() => {
     <button class="btn-primary" onclick="confirmVaultPath()">connect</button>
   </div>
 </div>
-
-<!-- ── Header ─────────────────────────────────────────────────────────────── -->
-<div class="header">
-  <div class="header-left">
-    <a class="back-link" href="https://www.stoult.com/workshop/">← return to the workshop</a>
-    <div class="wordmark">the <em>trainer</em></div>
-  </div>
-  <div class="header-right">
-    <div class="identity-pill" id="idPill">
-      <div class="pill-dot" id="pillDot"></div>
-      <span class="pill-label" id="pillLabel">not connected</span>
-      <button class="pill-btn" id="signOutBtn" style="display:none" onclick="signOut()">sign out</button>
-    </div>
-  </div>
-</div>
-
-<svg class="seam" viewBox="0 0 900 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-  <path d="M0 9 Q170 15 400 10 Q630 5 900 13" fill="none" stroke="var(--amber)" stroke-width="1" opacity="0.35"/>
-</svg>
 
 <!-- ── App shell ───────────────────────────────────────────────────────────── -->
 <div id="appShell" style="display:none;">
