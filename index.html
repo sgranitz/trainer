@@ -1140,33 +1140,28 @@ function renderWeightChart(withWt) {
   const sorted = [...withWt].sort((a, b) => a.date - b.date);
   const model  = sorted.length >= 2 ? fitExpDecay(sorted, goalWt) : null;
 
-  // Build projection curve (exponential decay toward goal)
-  let projCurve = [], projDate = null;
-  if (model && goalWt != null) {
+  // Build 3-week projection curve from last data point
+  let projCurve = [];
+  if (model) {
     const { wEq, k, C, t0ms } = model;
     const tLast = (sorted[sorted.length - 1].date.getTime() - t0ms) / 86400000;
-    const tGoal = -Math.log((goalWt - wEq) / C) / k;
-    if (tGoal > tLast && tGoal - tLast < 3650) {
-      projDate = new Date(t0ms + tGoal * 86400000);
-      for (let t = tLast; t <= tGoal; t += 2)
-        projCurve.push({ ms: t0ms + t * 86400000, w: wEq + C * Math.exp(-k * t) });
-      projCurve.push({ ms: t0ms + tGoal * 86400000, w: goalWt });
-    }
+    for (let t = tLast; t <= tLast + 21; t++)
+      projCurve.push({ ms: t0ms + t * 86400000, w: wEq + C * Math.exp(-k * t) });
   }
 
-  // Axis bounds
+  // Axis bounds — y based on actual data + near-term projection only
   const weights  = sorted.map(e => e.weight);
   const projWts  = projCurve.map(p => p.w);
-  const allWts   = [...weights, ...projWts, ...(goalWt != null ? [goalWt] : [])];
-  const yRawMin  = Math.min(...allWts);
+  const yRawMin  = Math.min(...weights, ...projWts);
   const yRawMax  = Math.max(...weights);
-  const yPad     = Math.max((yRawMax - yRawMin) * 0.08, 4);
+  const ySpan    = Math.max(yRawMax - yRawMin, 10);
+  const yPad     = ySpan * 0.12;
   const yMin     = yRawMin - yPad;
   const yMax     = yRawMax + yPad;
   const yRange   = yMax - yMin;
 
-  const xStartMs = sorted[0].date.getTime();
-  const xEndMs   = projCurve.length
+  const xStartMs  = sorted[0].date.getTime();
+  const xEndMs    = projCurve.length
     ? projCurve[projCurve.length - 1].ms
     : sorted[sorted.length - 1].date.getTime() + 21 * 86400000;
   const totalDays = Math.max((xEndMs - xStartMs) / 86400000, 1);
@@ -1179,12 +1174,14 @@ function renderWeightChart(withWt) {
   const ty  = w  => pT + (1 - (w - yMin) / yRange) * plotH;
   const fmt = d  => `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 
-  // Goal line
+  // Goal line — only draw if it falls within the visible y range
   let goalSVG = '';
   if (goalWt != null) {
-    const gy = ty(goalWt).toFixed(1);
-    goalSVG = `<line x1="${pL}" y1="${gy}" x2="${W - pR}" y2="${gy}" stroke="var(--amber)" stroke-width="1" stroke-dasharray="4,3" opacity="0.35"/>
-      <text x="${pL - 4}" y="${(+gy + 3.5).toFixed(1)}" fill="var(--amber)" font-size="8" text-anchor="end" font-family="var(--mono)" opacity="0.55">${goalWt}</text>`;
+    const gy = ty(goalWt);
+    if (gy >= pT - 2 && gy <= pT + plotH + 2) {
+      goalSVG = `<line x1="${pL}" y1="${gy.toFixed(1)}" x2="${W - pR}" y2="${gy.toFixed(1)}" stroke="var(--amber)" stroke-width="1" stroke-dasharray="4,3" opacity="0.35"/>
+        <text x="${pL - 4}" y="${(gy + 3.5).toFixed(1)}" fill="var(--amber)" font-size="8" text-anchor="end" font-family="var(--mono)" opacity="0.55">${goalWt}</text>`;
+    }
   }
 
   // Projection curve
@@ -1192,12 +1189,6 @@ function renderWeightChart(withWt) {
   if (projCurve.length >= 2) {
     const pts = projCurve.map(p => `${tx(p.ms).toFixed(1)},${ty(p.w).toFixed(1)}`).join(' ');
     projSVG = `<polyline points="${pts}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4,3" opacity="0.55"/>`;
-    if (projDate) {
-      const gx = tx(projDate.getTime()).toFixed(1);
-      const gy = ty(goalWt).toFixed(1);
-      projSVG += `<circle cx="${gx}" cy="${gy}" r="2.5" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.6"/>
-        <text x="${gx}" y="${(+gy - 6).toFixed(1)}" fill="var(--muted)" font-size="8" text-anchor="middle" font-family="var(--mono)" opacity="0.8">${fmt(projDate)}</text>`;
-    }
   }
 
   // Actual line
