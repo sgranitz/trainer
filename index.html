@@ -172,10 +172,7 @@ input[type=number].inp::-webkit-inner-spin-button { -webkit-appearance: none; }
 .prog-bar { height: 8px; background: var(--card2); border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
 .prog-fill { height: 100%; background: var(--amber); border-radius: 4px; transition: width 0.5s ease; }
 .prog-sub { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; }
-.wt-trend { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; }
-.wt-pt { text-align: center; flex-shrink: 0; }
-.wt-v { font-family: var(--mono); font-size: 15px; color: var(--amber); }
-.wt-d { font-family: var(--mono); font-size: 8px; color: var(--muted); margin-top: 2px; }
+.wt-chart { width: 100%; }
 .avg-grid { display: flex; }
 .avg-cell { flex: 1; text-align: center; padding: 4px 0; border-right: 1px solid var(--border); }
 .avg-cell:last-child { border-right: none; }
@@ -634,8 +631,8 @@ const STOULT = (() => {
     <div id="statsProgress"></div>
   </div>
   <div class="scard">
-    <div class="scard-lbl">Weight checkpoints</div>
-    <div class="wt-trend" id="wtTrend"></div>
+    <div class="scard-lbl">Weight trend</div>
+    <div class="wt-chart" id="wtTrend"></div>
   </div>
   <div class="scard">
     <div class="scard-lbl">Last 7 days avg</div>
@@ -1095,10 +1092,7 @@ function renderStats() {
   `;
 
   const withWt = entries.filter(e => e.weight);
-  const trend  = document.getElementById('wtTrend');
-  trend.innerHTML = withWt.length
-    ? withWt.slice(-10).map(e => `<div class="wt-pt"><div class="wt-v">${e.weight}</div><div class="wt-d">${MONTHS[e.date.getMonth()]} ${e.date.getDate()}</div></div>`).join('')
-    : '<span style="color:var(--muted);font-size:13px">No weight data yet.</span>';
+  renderWeightChart(withWt);
 
   const last7   = entries.slice(-7);
   const avgCal  = last7.length ? Math.round(last7.reduce((s, e) => s + sumCal(e.food),   0) / last7.length) : 0;
@@ -1110,6 +1104,103 @@ function renderStats() {
     <div class="avg-cell"><div class="avg-v">${avgPro ? avgPro + 'g' : '—'}</div><div class="avg-l">protein</div></div>
     <div class="avg-cell"><div class="avg-v">${avgStep ? fmtN(avgStep) : '—'}</div><div class="avg-l">steps</div></div>
   `;
+}
+
+// ── Weight chart ─────────────────────────────────────────────────────────────
+function renderWeightChart(withWt) {
+  const el = document.getElementById('wtTrend');
+  if (!withWt.length) {
+    el.innerHTML = '<span style="color:var(--muted);font-size:13px">No weight data yet.</span>';
+    return;
+  }
+
+  const { goalWt } = PROFILE;
+  const sorted = [...withWt].sort((a, b) => a.date - b.date);
+
+  // 7-day rate from last two weight entries
+  const last2 = sorted.slice(-2);
+  let ratePerDay = null, projDate = null;
+  if (last2.length >= 2) {
+    const days = (last2[1].date - last2[0].date) / 86400000;
+    ratePerDay = days > 0 ? (last2[1].weight - last2[0].weight) / days : null;
+    if (ratePerDay && ratePerDay < 0 && goalWt != null) {
+      const daysToGoal = (last2[1].weight - goalWt) / (-ratePerDay);
+      projDate = new Date(last2[1].date.getTime() + daysToGoal * 86400000);
+    }
+  }
+
+  // Axis bounds
+  const weights = sorted.map(e => e.weight);
+  const allWts  = goalWt != null ? [...weights, goalWt] : weights;
+  const rawMin  = Math.min(...allWts);
+  const rawMax  = Math.max(...allWts);
+  const yPad    = Math.max((rawMax - rawMin) * 0.12, 4);
+  const yMin    = rawMin - yPad;
+  const yMax    = rawMax + yPad;
+  const yRange  = yMax - yMin;
+
+  const xStart = sorted[0].date;
+  const xEnd   = projDate
+    ? new Date(Math.max(projDate.getTime(), sorted[sorted.length - 1].date.getTime()))
+    : new Date(sorted[sorted.length - 1].date.getTime() + 21 * 86400000);
+  const totalDays = Math.max((xEnd - xStart) / 86400000, 1);
+
+  // SVG layout
+  const W = 440, H = 155;
+  const pL = 36, pR = 16, pT = 14, pB = 24;
+  const plotW = W - pL - pR;
+  const plotH = H - pT - pB;
+
+  const tx = d  => pL + ((d - xStart) / 86400000 / totalDays) * plotW;
+  const ty = w  => pT + (1 - (w - yMin) / yRange) * plotH;
+  const fmt = d => `${MONTHS[d.getMonth()]} ${d.getDate()}`;
+
+  // Goal line
+  let goalSVG = '';
+  if (goalWt != null) {
+    const gy = ty(goalWt).toFixed(1);
+    goalSVG = `<line x1="${pL}" y1="${gy}" x2="${W - pR}" y2="${gy}" stroke="var(--amber)" stroke-width="1" stroke-dasharray="4,3" opacity="0.35"/>
+      <text x="${(pL - 4)}" y="${(+gy + 3.5).toFixed(1)}" fill="var(--amber)" font-size="8" text-anchor="end" font-family="var(--mono)" opacity="0.55">${goalWt}</text>`;
+  }
+
+  // Projection line + label
+  let projSVG = '';
+  if (projDate && ratePerDay) {
+    const lx = tx(sorted[sorted.length - 1].date).toFixed(1);
+    const ly = ty(sorted[sorted.length - 1].weight).toFixed(1);
+    const gx = tx(projDate).toFixed(1);
+    const gy = ty(goalWt).toFixed(1);
+    projSVG = `<line x1="${lx}" y1="${ly}" x2="${gx}" y2="${gy}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+      <text x="${gx}" y="${(+gy - 6).toFixed(1)}" fill="var(--muted)" font-size="8" text-anchor="middle" font-family="var(--mono)" opacity="0.75">${fmt(projDate)}</text>
+      <circle cx="${gx}" cy="${gy}" r="2.5" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.5"/>`;
+  }
+
+  // Actual line
+  const pts = sorted.map(e => `${tx(e.date).toFixed(1)},${ty(e.weight).toFixed(1)}`).join(' ');
+
+  // Dots + weight labels
+  let dotsSVG = '';
+  sorted.forEach((e, i) => {
+    const x = tx(e.date), y = ty(e.weight);
+    const anchor = i === 0 ? 'start' : i === sorted.length - 1 ? 'end' : 'middle';
+    dotsSVG += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="var(--amber)"/>
+      <text x="${x.toFixed(1)}" y="${(y - 6).toFixed(1)}" fill="var(--amber)" font-size="9" text-anchor="${anchor}" font-family="var(--mono)">${e.weight}</text>`;
+  });
+
+  // X-axis date labels (actual data points only)
+  let xLabelsSVG = '';
+  sorted.forEach(e => {
+    const x = tx(e.date).toFixed(1);
+    xLabelsSVG += `<text x="${x}" y="${H - 4}" fill="var(--muted)" font-size="8" text-anchor="middle" font-family="var(--mono)" opacity="0.6">${fmt(e.date)}</text>`;
+  });
+
+  el.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
+    ${goalSVG}
+    ${projSVG}
+    <polyline points="${pts}" fill="none" stroke="var(--amber)" stroke-width="1.5"/>
+    ${dotsSVG}
+    ${xLabelsSVG}
+  </svg>`;
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
