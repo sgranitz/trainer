@@ -985,10 +985,23 @@ function doAddExercise() {
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
-function changeDay(d) {
+async function changeDay(d) {
   flushEntry();
   closeAllForms();
   curDate = new Date(curDate.getTime() + d * 86400000);
+
+  // Lazy-load the target day if it hasn't been read into memory yet.
+  // Without this, navigating to a day outside the initially-loaded month
+  // produces a blank curEntry, and the *next* nav saves that blank to Drive.
+  const key = isoDate(curDate);
+  if (!dayData.find(e => isoDate(e.date) === key) && storage) {
+    try {
+      const raw = await storage.readFile(`${TRAINER_BASE}/${key}.md`);
+      const parsed = parseDayFile(raw);
+      if (parsed) dayData = mergeDayEntries(dayData, [parsed]);
+    } catch {}
+  }
+
   loadSelectedDay(); renderLog(); renderStatsBar();
 }
 
